@@ -24,53 +24,75 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   val translator = new CTranslator(typeProvider, importList)
 
-  override def indent: String = "    "
-  override def outFileName(topClassName: String): String = s"${type2class(topClassName)}.cs"
+  val importListSrc = new CppImportList
+  val importListHdr = new CppImportList
 
-  override def outImports(topClass: ClassSpec) =
-    importList.toList.map((x) => s"using $x;").mkString("", "\n", "\n")
+  val outSrcHeader = new StringLanguageOutputWriter(indent)
+  val outHdrHeader = new StringLanguageOutputWriter(indent)
+  val outSrc = new StringLanguageOutputWriter(indent)
+  val outHdr = new StringLanguageOutputWriter(indent)
+  val outHdrRoot = new StringLanguageOutputWriter(indent)
+  val outHdrDefs = new StringLanguageOutputWriter(indent)
+
+  override def results(topClass: ClassSpec): Map[String, String] = {
+    val className = topClass.nameAsStr
+    Map(
+      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrc.result),
+      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrRoot.result + outHdr.result)
+    )
+  }
+
+  override def outFileName(topClassName: String): String = topClassName.toLowerCase()
+  def outFileNameSource(className: String): String = outFileName(className) + ".c"
+  def outFileNameHeader(className: String): String = outFileName(className) + ".h"
+
+  override def indent: String = "    "
+  var rootClassCounter: Int = 0
 
   override def fileHeader(topClassName: String): Unit = {
-    outHeader.puts(s"// $headerComment")
-    outHeader.puts
+    outSrcHeader.puts(s"// $headerComment")
+    outSrcHeader.puts
 
-    var ns = "Kaitai"
-    if (!config.dotNetNamespace.isEmpty)
-      ns = config.dotNetNamespace
+    outHdrHeader.puts(s"// $headerComment")
+    outHdrHeader.puts
 
-    if (ns != "Kaitai")
-      importList.add("Kaitai")
+    importListSrc.addLocal(outFileNameHeader(topClassName))
 
-    out.puts
-    out.puts(s"namespace $ns")
-    out.puts(s"{")
-    out.inc
+    importListHdr.addKaitai("kaitaistruct.h")
   }
 
-  override def fileFooter(topClassName: String): Unit = {
-    out.dec
-    out.puts("}")
-  }
+  override def fileFooter(topClassName: String): Unit = {}
 
   override def classHeader(name: String): Unit = {
-
-    out.puts(s"public partial class ${type2class(name)} : $kstructName")
-    out.puts(s"{")
-    out.inc
-
-    // `FromFile` is generated only for parameterless types
-    if (typeProvider.nowClass.params.isEmpty) {
-      out.puts(s"public static ${type2class(name)} FromFile(string fileName)")
-      out.puts(s"{")
-      out.inc
-      out.puts(s"return new ${type2class(name)}(new $kstreamName(fileName));")
-      out.dec
-      out.puts("}")
-      out.puts
-    }
+	rootClassCounter += 1
+    if (rootClassCounter == 1) {
+		outHdrRoot.puts
+		outHdrRoot.puts(s"typedef struct ${name}_")
+		outHdrRoot.puts("{")
+		outHdrRoot.inc
+        outHdrRoot.puts("ks_handle _handle;")
+	} else {
+		outHdr.puts
+		outHdr.puts(s"typedef struct ${name}_")
+		outHdr.puts("{")
+		outHdr.inc
+		outHdr.puts("ks_handle _handle;")
+		outHdrDefs.puts(s"struct ${name}_;")
+	}
   }
 
-  override def classFooter(name: String): Unit = fileFooter(name)
+  override def classFooter(name: String): Unit = {
+	if (rootClassCounter == 1) {
+	  outHdrRoot.dec
+	  outHdrRoot.puts(s"} $name;")
+	  outHdrRoot.puts
+	} else {
+	  outHdr.dec
+	  outHdr.puts(s"} $name;")
+	  outHdr.puts
+	}
+	rootClassCounter -= 1
+  }
 
   override def classConstructorHeader(name: String, parentType: DataType, rootClassName: String, isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
     typeProvider.nowClass.meta.endian match {
@@ -112,10 +134,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     params.foreach((p) => handleAssignmentSimple(p.id, paramName(p.id)))
   }
 
-  override def classConstructorFooter: Unit = fileFooter(null)
+  override def classConstructorFooter: Unit = {}
 
-  override def runRead(name: List[String]): Unit =
-    out.puts("_read();")
+  override def runRead(name: List[String]): Unit = {}
 
   override def runReadCalc(): Unit = {
     out.puts
@@ -153,33 +174,21 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def readFooter(): Unit = fileFooter("")
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
-    out.puts(s"private ${kaitaiType2NativeTypeNullable(attrType, isNullable)} ${privateMemberName(attrName)};")
-  }
-
-  override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
-    out.puts(s"public ${kaitaiType2NativeTypeNullable(attrType, isNullable)} ${publicMemberName(attrName)} { get { return ${privateMemberName(attrName)}; } }")
-  }
-
-  override def universalDoc(doc: DocSpec): Unit = {
-    out.puts
-    doc.summary.foreach { summary =>
-      out.puts("/// <summary>")
-      out.putsLines("/// ", XMLUtils.escape(summary))
-      out.puts("/// </summary>")
+    if (idToStr(attrName) == "_parent" || idToStr(attrName) == "_root")
+    {
+      return
     }
-
-    doc.ref.foreach { docRef =>
-      out.puts("/// <remarks>")
-
-      val refStr = docRef match {
-        case TextRef(text) => XMLUtils.escape(text)
-        case ref: UrlRef => ref.toAhref
-      }
-
-      out.putsLines("/// ", s"Reference: $refStr")
-      out.puts("/// </remarks>")
-    }
+	if (rootClassCounter == 1) {
+		outHdrRoot.puts(s"${kaitaiType2NativeType(attrType)} ${privateMemberName(attrName)};")
+	} else {
+		outHdr.puts(s"${kaitaiType2NativeType(attrType)} ${privateMemberName(attrName)};")
+	}
+    
   }
+
+  override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
+
+  override def universalDoc(doc: DocSpec): Unit = {}
 
   override def attrParseHybrid(leProc: () => Unit, beProc: () => Unit): Unit = {
     out.puts(s"if (${privateMemberName(EndianIdentifier)} == true) {")
@@ -510,11 +519,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def instanceDeclaration(attrName: InstanceIdentifier, attrType: DataType, isNullable: Boolean): Unit = {
     out.puts(s"private bool ${flagForInstName(attrName)};")
-    out.puts(s"private ${kaitaiType2NativeTypeNullable(attrType, isNullable)} ${privateMemberName(attrName)};")
+    out.puts(s"private ${kaitaiType2NativeType(attrType)} ${privateMemberName(attrName)};")
   }
 
   override def instanceHeader(className: String, instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {
-    out.puts(s"public ${kaitaiType2NativeTypeNullable(dataType, isNullable)} ${publicMemberName(instName)}")
+    out.puts(s"public ${kaitaiType2NativeType(dataType)} ${publicMemberName(instName)}")
     out.puts("{")
     out.inc
     out.puts("get")
@@ -582,12 +591,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
   }
 
-  override def privateMemberName(id: Identifier): String = {
-    id match {
-      case SpecialIdentifier(name) => s"m${Utils.lowerCamelCase(name)}"
-      case _ => s"_${idToStr(id)}"
-    }
-  }
+  override def privateMemberName(id: Identifier): String = s"${idToStr(id)}"
 
   override def localTemporaryName(id: Identifier): String = s"_t_${idToStr(id)}"
 
@@ -621,37 +625,32 @@ object CCompiler extends LanguageCompilerStatic
     config: RuntimeConfig
   ): LanguageCompiler = new CCompiler(tp, config)
 
-  /**
-    * Determine .NET data type corresponding to a KS data type.
-    *
-    * @param attrType KS data type
-    * @return .NET data type
-    */
+
   def kaitaiType2NativeType(attrType: DataType): String = {
     attrType match {
-      case Int1Type(false) => "byte"
-      case IntMultiType(false, Width2, _) => "ushort"
-      case IntMultiType(false, Width4, _) => "uint"
-      case IntMultiType(false, Width8, _) => "ulong"
+      case Int1Type(false) => "uint8_t"
+      case IntMultiType(false, Width2, _) => "uint16_t"
+      case IntMultiType(false, Width4, _) => "uint32_t"
+      case IntMultiType(false, Width8, _) => "uint64_t"
 
-      case Int1Type(true) => "sbyte"
-      case IntMultiType(true, Width2, _) => "short"
-      case IntMultiType(true, Width4, _) => "int"
-      case IntMultiType(true, Width8, _) => "long"
+      case Int1Type(true) => "int8_t"
+      case IntMultiType(true, Width2, _) => "int16_t"
+      case IntMultiType(true, Width4, _) => "int32_t"
+      case IntMultiType(true, Width8, _) => "int64_t"
 
       case FloatMultiType(Width4, _) => "float"
       case FloatMultiType(Width8, _) => "double"
 
-      case BitsType(_, _) => "ulong"
+      case BitsType(_, _) => "int"
 
       case CalcIntType => "int"
       case CalcFloatType => "double"
       case _: BooleanType => "bool"
 
-      case _: StrType => "string"
-      case _: BytesType => "byte[]"
+      case _: StrType => "char*"
+      case _: BytesType => "ks_bytes"
 
-      case AnyType => "object"
+      case AnyType => "void*"
       case KaitaiStructType | CalcKaitaiStructType => kstructName
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
@@ -664,20 +663,7 @@ object CCompiler extends LanguageCompilerStatic
     }
   }
 
-  def kaitaiType2NativeTypeNullable(t: DataType, isNullable: Boolean): String = {
-    val r = kaitaiType2NativeType(t)
-    if (isNullable) {
-      t match {
-        case _: NumericType | _: BooleanType => s"$r?"
-        case _ => r
-      }
-    } else {
-      r
-    }
-  }
-
   def types2class(typeName: Ast.typeId): String =
-    // FIXME: handle absolute
     types2class(typeName.names)
   def types2class(names: Iterable[String]) = names.map(type2class).mkString(".")
 
