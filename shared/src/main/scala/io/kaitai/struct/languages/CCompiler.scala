@@ -37,7 +37,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
-	outSrcDefs.puts
     Map(
       outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrc.result),
       outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrRoot.result + outHdr.result)
@@ -68,17 +67,29 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def classHeader(name: String): Unit = {
 	rootClassCounter += 1
     if (rootClassCounter == 1) {
+		outSrcDefs.puts
+		outHdrRoot.puts
+		outHdrRoot.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, struct ksx_${name}_* data);")
+		outSrc.puts
+		outSrc.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_$name* data)")
+		outSrc.puts("{")
+		outSrc.inc
+		outSrc.puts(s"return ksx_read_$name(stream, data, stream, data);")
+		outSrc.dec
+		outSrc.puts("}")
 		outHdrRoot.puts
 		outHdrRoot.puts(s"typedef struct ksx_${name}_")
 		outHdrRoot.puts("{")
 		outHdrRoot.inc
-        outHdrRoot.puts("ks_handle _handle;")
+        outHdrRoot.puts("ks_handle* _handle;")
+		outHdrDefs.puts
+		outHdrDefs.puts(s"struct ksx_${name}_;")
 	} else {
 		outHdr.puts
 		outHdr.puts(s"typedef struct ksx_${name}_")
 		outHdr.puts("{")
 		outHdr.inc
-		outHdr.puts("ks_handle _handle;")
+		outHdr.puts("ks_handle* _handle;")
 		outHdrDefs.puts(s"struct ksx_${name}_;")
 	}
   }
@@ -87,20 +98,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 	if (rootClassCounter == 1) {
 	  outHdrRoot.dec
 	  outHdrRoot.puts(s"} ksx_$name;")
-	  outHdrRoot.puts
 	} else {
 	  outHdr.dec
 	  outHdr.puts(s"} ksx_$name;")
-	  outHdr.puts
 	}
 	rootClassCounter -= 1
   }
 
   override def classConstructorHeader(name: String, parentType: DataType, rootClassName: String, isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
-	if (rootClassCounter != 1) {
-	  outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream *stream, ksx_$name *data, ks_stream *root_stream, ksx_$rootClassName *root_data);");
-	}
-    outSrc.puts(s"static int ksx_read_${name}(ks_stream *stream, ksx_$name *data, ks_stream *root_stream, ksx_$rootClassName *root_data)")
+	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* stream, ksx_$name* data, ks_stream* root_stream, ksx_$rootClassName* root_data);");
+	outSrc.puts
+    outSrc.puts(s"static int ksx_read_${name}(ks_stream* stream, ksx_$name* data, ks_stream* root_stream, ksx_$rootClassName* root_data)")
   }
 
   override def classConstructorFooter: Unit = {}
