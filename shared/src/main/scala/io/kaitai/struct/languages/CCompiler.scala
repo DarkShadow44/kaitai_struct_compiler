@@ -29,6 +29,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   val outSrcHeader = new StringLanguageOutputWriter(indent)
   val outHdrHeader = new StringLanguageOutputWriter(indent)
+  val outSrcDefs = new StringLanguageOutputWriter(indent)
   val outSrc = new StringLanguageOutputWriter(indent)
   val outHdr = new StringLanguageOutputWriter(indent)
   val outHdrRoot = new StringLanguageOutputWriter(indent)
@@ -36,8 +37,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
+	outSrcDefs.puts
     Map(
-      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrc.result),
+      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrc.result),
       outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrRoot.result + outHdr.result)
     )
   }
@@ -67,71 +69,38 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 	rootClassCounter += 1
     if (rootClassCounter == 1) {
 		outHdrRoot.puts
-		outHdrRoot.puts(s"typedef struct ${name}_")
+		outHdrRoot.puts(s"typedef struct ksx_${name}_")
 		outHdrRoot.puts("{")
 		outHdrRoot.inc
         outHdrRoot.puts("ks_handle _handle;")
 	} else {
 		outHdr.puts
-		outHdr.puts(s"typedef struct ${name}_")
+		outHdr.puts(s"typedef struct ksx_${name}_")
 		outHdr.puts("{")
 		outHdr.inc
 		outHdr.puts("ks_handle _handle;")
-		outHdrDefs.puts(s"struct ${name}_;")
+		outHdrDefs.puts(s"struct ksx_${name}_;")
 	}
   }
 
   override def classFooter(name: String): Unit = {
 	if (rootClassCounter == 1) {
 	  outHdrRoot.dec
-	  outHdrRoot.puts(s"} $name;")
+	  outHdrRoot.puts(s"} ksx_$name;")
 	  outHdrRoot.puts
 	} else {
 	  outHdr.dec
-	  outHdr.puts(s"} $name;")
+	  outHdr.puts(s"} ksx_$name;")
 	  outHdr.puts
 	}
 	rootClassCounter -= 1
   }
 
   override def classConstructorHeader(name: String, parentType: DataType, rootClassName: String, isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
-    typeProvider.nowClass.meta.endian match {
-      case Some(_: CalcEndian) | Some(InheritedEndian) =>
-        out.puts(s"private bool? ${privateMemberName(EndianIdentifier)};")
-      case _ =>
-        // no _is_le variable
-    }
-
-    val addEndian = if (isHybrid) ", bool? isLe = null" else ""
-
-    val pIo = paramName(IoIdentifier)
-    val pParent = paramName(ParentIdentifier)
-    val pRoot = paramName(RootIdentifier)
-
-    val paramsArg = Utils.join(params.map((p) =>
-      s"${kaitaiType2NativeType(p.dataType)} ${paramName(p.id)}"
-    ), "", ", ", ", ")
-
-    out.puts(
-      s"public ${type2class(name)}($paramsArg" +
-        s"$kstreamName $pIo, " +
-        s"${kaitaiType2NativeType(parentType)} $pParent = null, " +
-        s"${type2class(rootClassName)} $pRoot = null$addEndian) : base($pIo)"
-    )
-    out.puts(s"{")
-    out.inc
-    handleAssignmentSimple(ParentIdentifier, pParent)
-
-    handleAssignmentSimple(
-      RootIdentifier,
-      if (name == rootClassName) s"$pRoot ?? this" else pRoot
-    )
-
-    if (isHybrid)
-      handleAssignmentSimple(EndianIdentifier, "isLe")
-
-    // Store parameters passed to us
-    params.foreach((p) => handleAssignmentSimple(p.id, paramName(p.id)))
+	if (rootClassCounter != 1) {
+	  outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream *stream, ksx_$name *data, ks_stream *root_stream, ksx_$rootClassName *root_data);");
+	}
+    outSrc.puts(s"static int ksx_read_${name}(ks_stream *stream, ksx_$name *data, ks_stream *root_stream, ksx_$rootClassName *root_data)")
   }
 
   override def classConstructorFooter: Unit = {}
@@ -157,21 +126,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def readHeader(endian: Option[FixedEndian], isEmpty: Boolean) = {
-    val readAccessAndType = if (!config.autoRead) {
-      "public"
-    } else {
-      "private"
-    }
-    val suffix = endian match {
-      case Some(e) => Utils.upperUnderscoreCase(e.toSuffix)
-      case None => ""
-    }
-    out.puts(s"$readAccessAndType void _read$suffix()")
-    out.puts("{")
-    out.inc
+	outSrc.puts("{")
+    outSrc.inc
   }
 
-  override def readFooter(): Unit = fileFooter("")
+  override def readFooter(): Unit = {
+    outSrc.dec
+    outSrc.puts("}")
+  }
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
     if (idToStr(attrName) == "_parent" || idToStr(attrName) == "_root")
@@ -366,7 +328,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit =
-    out.puts(s"${privateMemberName(id)} = $expr;")
+    outSrc.puts(s"data->${privateMemberName(id)} = $expr;")
 
   override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit =
     out.puts(s"${kaitaiType2NativeType(dataType)} $id = $expr;")
