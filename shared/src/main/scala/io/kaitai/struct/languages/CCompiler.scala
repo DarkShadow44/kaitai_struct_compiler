@@ -328,7 +328,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit =
-    outSrc.puts(s"data->${privateMemberName(id)} = $expr;")
+    outSrc.puts(s"$expr(stream, &data->${privateMemberName(id)}, root_stream, root_data);")
 
   override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit =
     out.puts(s"${kaitaiType2NativeType(dataType)} $id = $expr;")
@@ -345,7 +345,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
     dataType match {
       case t: ReadableType =>
-        s"$io.Read${Utils.capitalize(t.apiCall(defEndian))}()"
+        s"ks_stream_read_${t.apiCall(defEndian)}"
       case blt: BytesLimitType =>
         s"$io.ReadBytes(${expression(blt.size)})"
       case _: BytesEosType =>
