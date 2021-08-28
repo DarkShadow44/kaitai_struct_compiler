@@ -20,3 +20,4 @@ project/boot/
 # Unpacking complete binaries for testing purposes
 /runnable
 js/npm
+output/
