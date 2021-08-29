@@ -166,6 +166,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case t: UserType => "_*"
       case _ => ""
     }
+    val isSubtypeByte = attrName match {
+        case RawIdentifier(_) => true
+        case _ => false
+    }
+    if (isSubtypeByte) {
+        return
+    }
 	if (rootClassCounter == 1) {
 		outHdrRoot.puts(s"$prefix${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
 	} else {
@@ -355,13 +362,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
     val name = privateMemberName(id)
+    val expr2 = expr.replaceAll("_NAME_", name)
     id match {
         case RawIdentifier(_) => {
-            outMethodHead.puts(s"ks_bytes $name;")
+            outMethodHead.puts(s"ks_bytes* _raw_$name;")
+            outMethodHead.puts(s"ks_stream _io_$name;")
             outMethodBody.puts(s"/* Subtype */")
-            outMethodBody.puts(s"${expr}, &$name);")
+            outMethodBody.puts(s"${expr2}_raw_$name);")
         }
-        case _ => outMethodBody.puts(s"${expr}, &data->$name);")
+        case _ => outMethodBody.puts(s"${expr2}data->$name);")
     }
   }
 
@@ -380,22 +389,23 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
     dataType match {
       case t: ReadableType =>
-        s"ks_stream_read_${t.apiCall(defEndian)}(stream"
+        s"ks_stream_read_${t.apiCall(defEndian)}(stream, &"
       case blt: BytesLimitType =>
-        s"ks_stream_read_bytes(stream, ${expression(blt.size)}"
+        s"ks_stream_read_bytes(stream, ${expression(blt.size)}, &"
       case _: BytesEosType =>
         s"$io.ReadBytesFull()"
       case BytesTerminatedType(terminator, include, consume, eosError, _) =>
         s"$io.ReadBytesTerm($terminator, $include, $consume, $eosError)"
       case BitsType1(bitEndian) =>
-        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1"
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1, &"
       case BitsType(width: Int, bitEndian) =>
-        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width"
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &"
       case t: UserType =>
         val name = t.name.mkString(".").toLowerCase()
-        outMethodHead.puts(s"ks_stream _io_$name;")
-        outMethodBody.puts(s"ks_stream_create_from_bytes(&_io_$name, &_raw_$name);")
-        s"ksx_read_$name(stream_root, data_root, &_io_$name"
+        s"ks_stream_create_from_bytes(&_io__NAME_, _raw__NAME_);\n" +
+            s"    data->_NAME_ = malloc(sizeof(ksx_$name));\n" +
+            s"    ks_bytes_destroy(_raw__NAME_);\n" +
+            s"    ksx_read_$name(root_stream, root_data, &_io__NAME_, "
     }
   }
 
@@ -562,7 +572,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case NamedIdentifier(name) => name.toLowerCase()
       case NumberedIdentifier(idx) => s"_${NumberedIdentifier.TEMPLATE}$idx"
       case InstanceIdentifier(name) => name.toLowerCase()
-      case RawIdentifier(innerId) => "_raw_" + idToStr(innerId)
+      case RawIdentifier(innerId) => idToStr(innerId)
     }
   }
 
