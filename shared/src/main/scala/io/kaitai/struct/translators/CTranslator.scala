@@ -58,15 +58,8 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
       s
     }
 
-  override def doEnumByLabel(enumTypeAbs: List[String], label: String): String =
-    s"${enumClass(enumTypeAbs)}.${Utils.upperCamelCase(label)}"
-  override def doEnumById(enumTypeAbs: List[String], id: String): String =
-    s"((${enumClass(enumTypeAbs)}) $id)"
-
-  def enumClass(enumTypeAbs: List[String]): String = {
-    val enumTypeRel = Utils.relClass(enumTypeAbs, provider.nowClass.name)
-    CCompiler.types2class(enumTypeRel)
-  }
+  override def doEnumByLabel(enumTypeAbs: List[String], label: String): String = label
+  override def doEnumById(enumTypeAbs: List[String], id: String): String = id
 
   override def doStrCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr) = {
     if (op == Ast.cmpop.Eq) {

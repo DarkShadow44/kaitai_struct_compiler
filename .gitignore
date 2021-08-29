@@ -21,6 +21,4 @@ project/boot/
 /runnable
 js/npm
 output/kaitai-struct-compiler-0.10-SNAPSHOT/lib
-output/kaitai-struct-compiler-0.10-SNAPSHOT/bin/kaitai-struct-compiler*
-output/kaitai-struct-compiler-0.10-SNAPSHOT/bin/test.c
-output/kaitai-struct-compiler-0.10-SNAPSHOT/bin/test.h
+.bsp

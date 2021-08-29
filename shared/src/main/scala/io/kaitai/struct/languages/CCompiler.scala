@@ -148,10 +148,18 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     {
       return
     }
+    val prefix = attrType match {
+      case t: UserType => "struct "
+      case _ => ""
+    }
+    val suffix = attrType match {
+      case t: UserType => "_*"
+      case _ => ""
+    }
 	if (rootClassCounter == 1) {
-		outHdrRoot.puts(s"${kaitaiType2NativeType(attrType)} ${privateMemberName(attrName)};")
+		outHdrRoot.puts(s"$prefix${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
 	} else {
-		outHdr.puts(s"${kaitaiType2NativeType(attrType)} ${privateMemberName(attrName)};")
+		outHdr.puts(s"$prefix${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
 	}
     
   }
@@ -336,7 +344,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit =
-    outSrc.puts(s"$expr(stream, &data->${privateMemberName(id)}, root_stream, root_data);")
+    outSrc.puts(s"${expr}stream, &data->${privateMemberName(id)}, root_stream, root_data);")
 
   override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit =
     out.puts(s"${kaitaiType2NativeType(dataType)} $id = $expr;")
@@ -353,7 +361,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
     dataType match {
       case t: ReadableType =>
-        s"ks_stream_read_${t.apiCall(defEndian)}"
+        s"ks_stream_read_${t.apiCall(defEndian)}("
       case blt: BytesLimitType =>
         s"$io.ReadBytes(${expression(blt.size)})"
       case _: BytesEosType =>
@@ -361,9 +369,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case BytesTerminatedType(terminator, include, consume, eosError, _) =>
         s"$io.ReadBytesTerm($terminator, $include, $consume, $eosError)"
       case BitsType1(bitEndian) =>
-        s"$io.ReadBitsInt${Utils.upperCamelCase(bitEndian.toSuffix)}(1) != 0"
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(1, "
       case BitsType(width: Int, bitEndian) =>
-        s"$io.ReadBitsInt${Utils.upperCamelCase(bitEndian.toSuffix)}($width)"
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($width, "
       case t: UserType =>
         val addParams = Utils.join(t.args.map((a) => translator.translate(a)), "", ", ", ", ")
         val addArgs = if (t.isOpaque) {
@@ -526,19 +534,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   def flagForInstName(ksName: Identifier) = s"f_${idToStr(ksName)}"
 
   override def enumDeclaration(curClass: String, enumName: String, enumColl: Seq[(Long, String)]): Unit = {
-    val enumClass = type2class(enumName)
+    val enumClass = "KSX_" + type2class(enumName).toUpperCase()
 
-    out.puts
-    out.puts(s"public enum $enumClass")
-    out.puts(s"{")
-    out.inc
+    outHdrDefs.puts
+    outHdrDefs.puts(s"typedef enum ${enumClass}_")
+    outHdrDefs.puts(s"{")
+    outHdrDefs.inc
 
     enumColl.foreach { case (id, label) =>
-      out.puts(s"${Utils.upperCamelCase(label)} = $id,")
+      outHdrDefs.puts(s"${enumClass}_${label.toUpperCase()} = $id,")
     }
 
-    out.dec
-    out.puts("}")
+    outHdrDefs.dec
+    outHdrDefs.puts(s"} $enumClass;")
   }
 
   def idToStr(id: Identifier): String = {
@@ -561,12 +569,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
   }
 
-  override def privateMemberName(id: Identifier): String = {
-    id match {
-      case SpecialIdentifier(name) => s"m${Utils.lowerCamelCase(name)}"
-      case _ => s"_${idToStr(id)}"
-    }
-  }
+  override def privateMemberName(id: Identifier): String = s"${idToStr(id)}"
 
   override def localTemporaryName(id: Identifier): String = s"_t_${idToStr(id)}"
 
@@ -616,7 +619,7 @@ object CCompiler extends LanguageCompilerStatic
       case FloatMultiType(Width4, _) => "float"
       case FloatMultiType(Width8, _) => "double"
 
-      case BitsType(_, _) => "int"
+      case BitsType(_, _) => "uint32_t"
 
       case CalcIntType => "int"
       case CalcFloatType => "double"
@@ -629,8 +632,8 @@ object CCompiler extends LanguageCompilerStatic
       case KaitaiStructType | CalcKaitaiStructType => kstructName
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
-      case t: UserType => types2class(t.name)
-      case EnumType(name, _) => types2class(name)
+      case t: UserType => "ksx_" + types2class(t.name)
+      case EnumType(name, _) => "KSX_" + types2class(name).toUpperCase()
 
       case at: ArrayType => s"List<${kaitaiType2NativeType(at.elType)}>"
 
@@ -640,7 +643,7 @@ object CCompiler extends LanguageCompilerStatic
 
   def types2class(typeName: Ast.typeId): String =
     types2class(typeName.names)
-  def types2class(names: Iterable[String]) = names.map(type2class).mkString(".")
+  def types2class(names: Iterable[String]) = names.map(type2class).mkString(".").toLowerCase()
 
   override def kstructName = "KaitaiStruct"
   override def kstreamName = "KaitaiStream"
