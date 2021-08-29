@@ -27,6 +27,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   val translator = new CTranslator(typeProvider, importListSrc)
 
+  var outMethodHead = new StringLanguageOutputWriter(indent)
+  var outMethodBody = new StringLanguageOutputWriter(indent)
   val outSrcHeader = new StringLanguageOutputWriter(indent)
   val outHdrHeader = new StringLanguageOutputWriter(indent)
   val outSrcDefs = new StringLanguageOutputWriter(indent)
@@ -56,6 +58,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outHdrHeader.puts(s"// $headerComment")
     outHdrHeader.puts
+    outHdrHeader.puts("#define KS_DEPEND_ON_INTERNALS")
 
     importListSrc.addLocal(outFileNameHeader(topClassName))
 
@@ -106,9 +109,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def classConstructorHeader(name: String, parentType: DataType, rootClassName: String, isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
-	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* stream, ksx_$name* data, ks_stream* root_stream, ksx_$rootClassName* root_data);");
+	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data);");
 	outSrc.puts
-    outSrc.puts(s"static int ksx_read_${name}(ks_stream* stream, ksx_$name* data, ks_stream* root_stream, ksx_$rootClassName* root_data)")
+    outSrc.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data)")
   }
 
   override def classConstructorFooter: Unit = {}
@@ -135,12 +138,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def readHeader(endian: Option[FixedEndian], isEmpty: Boolean) = {
 	outSrc.puts("{")
-    outSrc.inc
+    outMethodHead.inc
+    outMethodBody.inc
   }
 
   override def readFooter(): Unit = {
-    outSrc.dec
+    outSrc.add(outMethodHead)
+    if (outMethodHead.result != "") {
+        outSrc.puts
+    }
+    outSrc.add(outMethodBody)
     outSrc.puts("}")
+    outMethodHead = new StringLanguageOutputWriter(indent)
+    outMethodBody = new StringLanguageOutputWriter(indent)
   }
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
@@ -343,8 +353,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.puts("}")
   }
 
-  override def handleAssignmentSimple(id: Identifier, expr: String): Unit =
-    outSrc.puts(s"${expr}stream, &data->${privateMemberName(id)}, root_stream, root_data);")
+  override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
+    val name = privateMemberName(id)
+    id match {
+        case RawIdentifier(_) => {
+            outMethodHead.puts(s"ks_bytes $name;")
+            outMethodBody.puts(s"/* Subtype */")
+            outMethodBody.puts(s"${expr}, &$name);")
+        }
+        case _ => outMethodBody.puts(s"${expr}, &data->$name);")
+    }
+  }
 
   override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit =
     out.puts(s"${kaitaiType2NativeType(dataType)} $id = $expr;")
@@ -361,34 +380,22 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
     dataType match {
       case t: ReadableType =>
-        s"ks_stream_read_${t.apiCall(defEndian)}("
+        s"ks_stream_read_${t.apiCall(defEndian)}(stream"
       case blt: BytesLimitType =>
-        s"$io.ReadBytes(${expression(blt.size)})"
+        s"ks_stream_read_bytes(stream, ${expression(blt.size)}"
       case _: BytesEosType =>
         s"$io.ReadBytesFull()"
       case BytesTerminatedType(terminator, include, consume, eosError, _) =>
         s"$io.ReadBytesTerm($terminator, $include, $consume, $eosError)"
       case BitsType1(bitEndian) =>
-        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(1, "
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1"
       case BitsType(width: Int, bitEndian) =>
-        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($width, "
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width"
       case t: UserType =>
-        val addParams = Utils.join(t.args.map((a) => translator.translate(a)), "", ", ", ", ")
-        val addArgs = if (t.isOpaque) {
-          ""
-        } else {
-          val parent = t.forcedParent match {
-            case Some(USER_TYPE_NO_PARENT) => "null"
-            case Some(fp) => translator.translate(fp)
-            case None => "this"
-          }
-          val addEndian = t.classSpec.get.meta.endian match {
-            case Some(InheritedEndian) => s", ${privateMemberName(EndianIdentifier)}"
-            case _ => ""
-          }
-          s", $parent, ${privateMemberName(RootIdentifier)}$addEndian"
-        }
-        s"new ${types2class(t.name)}($addParams$io$addArgs)"
+        val name = t.name.mkString(".").toLowerCase()
+        outMethodHead.puts(s"ks_stream _io_$name;")
+        outMethodBody.puts(s"ks_stream_create_from_bytes(&_io_$name, &_raw_$name);")
+        s"ksx_read_$name(stream_root, data_root, &_io_$name"
     }
   }
 
@@ -552,9 +559,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   def idToStr(id: Identifier): String = {
     id match {
       case SpecialIdentifier(name) => name
-      case NamedIdentifier(name) => Utils.lowerCamelCase(name)
+      case NamedIdentifier(name) => name.toLowerCase()
       case NumberedIdentifier(idx) => s"_${NumberedIdentifier.TEMPLATE}$idx"
-      case InstanceIdentifier(name) => Utils.lowerCamelCase(name)
+      case InstanceIdentifier(name) => name.toLowerCase()
       case RawIdentifier(innerId) => "_raw_" + idToStr(innerId)
     }
   }
@@ -626,14 +633,14 @@ object CCompiler extends LanguageCompilerStatic
       case _: BooleanType => "bool"
 
       case _: StrType => "char*"
-      case _: BytesType => "ks_bytes"
+      case _: BytesType => "ks_bytes*"
 
       case AnyType => "void*"
       case KaitaiStructType | CalcKaitaiStructType => kstructName
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
-      case t: UserType => "ksx_" + types2class(t.name)
-      case EnumType(name, _) => "KSX_" + types2class(name).toUpperCase()
+      case t: UserType => "ksx_" + t.name.mkString(".").toLowerCase()
+      case EnumType(name, _) => "KSX_" + name.mkString(".").toUpperCase()
 
       case at: ArrayType => s"List<${kaitaiType2NativeType(at.elType)}>"
 
