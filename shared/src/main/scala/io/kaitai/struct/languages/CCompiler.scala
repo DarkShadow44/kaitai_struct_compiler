@@ -22,10 +22,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     with NoNeedForFullClassPath {
   import CCompiler._
 
-  val translator = new CTranslator(typeProvider, importList)
-
   val importListSrc = new CppImportList
   val importListHdr = new CppImportList
+
+  val translator = new CTranslator(typeProvider, importListSrc)
 
   val outSrcHeader = new StringLanguageOutputWriter(indent)
   val outHdrHeader = new StringLanguageOutputWriter(indent)
@@ -561,7 +561,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
   }
 
-  override def privateMemberName(id: Identifier): String = s"${idToStr(id)}"
+  override def privateMemberName(id: Identifier): String = {
+    id match {
+      case SpecialIdentifier(name) => s"m${Utils.lowerCamelCase(name)}"
+      case _ => s"_${idToStr(id)}"
+    }
+  }
 
   override def localTemporaryName(id: Identifier): String = s"_t_${idToStr(id)}"
 

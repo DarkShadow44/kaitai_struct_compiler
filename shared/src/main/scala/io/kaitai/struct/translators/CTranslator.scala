@@ -7,13 +7,13 @@ import io.kaitai.struct.exprlang.Ast
 import io.kaitai.struct.exprlang.Ast._
 import io.kaitai.struct.format.Identifier
 import io.kaitai.struct.languages.CCompiler
+import io.kaitai.struct.languages.components.CppImportList
 
-class CTranslator(provider: TypeProvider, importList: ImportList) extends BaseTranslator(provider) {
+class CTranslator(provider: TypeProvider, importList: CppImportList) extends BaseTranslator(provider) {
   override def doArrayLiteral(t: DataType, value: Seq[expr]): String = {
     val nativeType = CCompiler.kaitaiType2NativeType(t)
     val commaStr = value.map((v) => translate(v)).mkString(", ")
 
-    importList.add("System.Collections.Generic")
     s"new List<$nativeType> { $commaStr }"
   }
 
@@ -52,10 +52,10 @@ class CTranslator(provider: TypeProvider, importList: ImportList) extends BaseTr
       s match {
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
-        case _ => s"M${Utils.upperCamelCase(s)}"
+        case _ => s"M$s"
       }
     } else {
-      s"${Utils.upperCamelCase(s)}"
+      s
     }
 
   override def doEnumByLabel(enumTypeAbs: List[String], label: String): String =
@@ -90,7 +90,6 @@ class CTranslator(provider: TypeProvider, importList: ImportList) extends BaseTr
 
   // Predefined methods of various types
   override def strToInt(s: expr, base: expr): String = {
-    importList.add("System")
     s"Convert.ToInt64(${translate(s)}, ${translate(base)})"
   }
   override def enumToInt(v: expr, et: EnumType): String =
@@ -98,7 +97,6 @@ class CTranslator(provider: TypeProvider, importList: ImportList) extends BaseTr
   override def floatToInt(v: expr): String =
     s"(long) (${translate(v)})"
   override def intToStr(i: expr, base: expr): String = {
-    importList.add("System")
     s"Convert.ToString((long) (${translate(i)}), ${translate(base)})"
   }
   override def bytesToStr(bytesExpr: String, encoding: Ast.expr): String =
@@ -128,11 +126,11 @@ class CTranslator(provider: TypeProvider, importList: ImportList) extends BaseTr
   override def arraySize(a: expr): String =
     s"${translate(a)}.Count"
   override def arrayMin(a: Ast.expr): String = {
-    importList.add("System.Linq")
     s"${translate(a)}.Min()"
   }
   override def arrayMax(a: Ast.expr): String = {
-    importList.add("System.Linq")
     s"${translate(a)}.Max()"
   }
+  override def anyField(value: expr, attrName: String): String =
+    s"${translate(value)}->${doName(attrName)}"
 }
