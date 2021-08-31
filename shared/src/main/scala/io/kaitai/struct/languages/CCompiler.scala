@@ -371,16 +371,54 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast)
+  }
+
+  def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian])
+  {
+    // TODO: Use io!
     val name = privateMemberName(id)
-    val expr2 = expr.replaceAll("_NAME_", name)
-    id match {
-        case RawIdentifier(_) => {
+    // outMethodBody.puts("//" + dataType.toString() + " __ " + assignType.toString())
+    val targetType = kaitaiType2NativeType(dataType)
+
+    dataType match {
+      case t: ReadableType =>
+        outMethodHead.puts(s"$targetType $name;")
+        outMethodBody.puts(s"CHECK(ks_stream_read_${t.apiCall(defEndian)}(stream, &$name));")
+        outMethodBody.puts(s"data->$name = $name;")
+      case blt: BytesLimitType =>
+        id match {
+          case RawIdentifier(_) =>
             outMethodHead.puts(s"ks_bytes* _raw_$name;")
             outMethodHead.puts(s"ks_stream* _io_$name;")
             outMethodBody.puts(s"/* Subtype with substream */")
-            outMethodBody.puts(s"${expr2}_raw_$name));")
+            outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &_raw_$name));")
+          case _ =>
+            outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &data->$name));")
         }
-        case _ => outMethodBody.puts(s"${expr2}data->$name));")
+      case _: BytesEosType =>
+        // s"$io.ReadBytesFull()"
+      case BytesTerminatedType(terminator, include, consume, eosError, _) =>
+        // s"$io.ReadBytesTerm($terminator, $include, $consume, $eosError)"
+      case BitsType1(bitEndian) =>
+        outMethodHead.puts(s"$targetType $name;")
+        outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1, &$name));")
+        outMethodBody.puts(s"data->$name = $name;")
+      case BitsType(width: Int, bitEndian) =>
+        outMethodHead.puts(s"$targetType $name;")
+        outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &$name));")
+        outMethodBody.puts(s"data->$name = $name;")
+      case t: UserTypeFromBytes =>
+        val typeName = makeName(t.name)
+        outMethodBody.puts(s"CHECK(ks_stream_create_from_bytes(&_io_$name, _raw_$name));")
+        outMethodBody.puts(s"data->$name = calloc(1, sizeof(ksx_$typeName));")
+        outMethodBody.puts(s"ks_bytes_destroy(_raw_$name);")
+        outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, _io_$name, data->$name));")
+      case t: UserTypeInstream =>
+        val typeName = makeName(t.name)
+        outMethodBody.puts(s"/* Subtype */")
+        outMethodBody.puts(s"data->$name = calloc(1, sizeof(ksx_$typeName));")
+        outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$name));")
     }
   }
 
@@ -396,33 +434,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.puts("}")
   }
 
+  var dataTypeLast: DataType = null;
+  var assignTypeLast: DataType = null;
+  var ioLast: String = "";
+  var defEndianLast: Option[FixedEndian] = null
+
   override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
-    //  outMethodBody.puts("//" + dataType.toString() + " __ " + assignType.toString())
-    dataType match {
-      case t: ReadableType =>
-        s"CHECK(ks_stream_read_${t.apiCall(defEndian)}(stream, &"
-      case blt: BytesLimitType =>
-        s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &"
-      case _: BytesEosType =>
-        s"$io.ReadBytesFull()"
-      case BytesTerminatedType(terminator, include, consume, eosError, _) =>
-        s"$io.ReadBytesTerm($terminator, $include, $consume, $eosError)"
-      case BitsType1(bitEndian) =>
-        s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1, &"
-      case BitsType(width: Int, bitEndian) =>
-        s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &"
-      case t: UserTypeFromBytes =>
-        val name = makeName(t.name)
-        s"CHECK(ks_stream_create_from_bytes(&_io__NAME_, _raw__NAME_));\n" +
-            s"    data->_NAME_ = calloc(1, sizeof(ksx_$name));\n" +
-            s"    ks_bytes_destroy(_raw__NAME_);\n" +
-            s"    CHECK(ksx_read_$name(root_stream, root_data, _io__NAME_, "
-      case t: UserTypeInstream =>
-        val name = makeName(t.name)
-        s"/* Subtype */\n" +
-            s"    data->_NAME_ = calloc(1, sizeof(ksx_$name));\n" +
-            s"    CHECK(ksx_read_$name(root_stream, root_data, stream, "
-    }
+    dataTypeLast = dataType;
+    assignTypeLast = assignType;
+    ioLast = io;
+    defEndianLast = defEndian;
+    ""
   }
 
   override def bytesPadTermExpr(expr0: String, padRight: Option[Int], terminator: Option[Int], include: Boolean) = {
