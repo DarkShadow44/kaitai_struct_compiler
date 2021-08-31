@@ -112,7 +112,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data);");
 	outSrc.puts
     outSrc.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data)")
-    outMethodBody.puts(s"    ks_allocate_handle(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$name));")
+    outMethodBody.puts(s"    CHECK(ks_allocate_handle(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$name)));")
   }
 
   override def classConstructorFooter: Unit = {}
@@ -369,9 +369,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             outMethodHead.puts(s"ks_bytes* _raw_$name;")
             outMethodHead.puts(s"ks_stream* _io_$name;")
             outMethodBody.puts(s"/* Subtype with substream */")
-            outMethodBody.puts(s"${expr2}_raw_$name);")
+            outMethodBody.puts(s"${expr2}_raw_$name));")
         }
-        case _ => outMethodBody.puts(s"${expr2}data->$name);")
+        case _ => outMethodBody.puts(s"${expr2}data->$name));")
     }
   }
 
@@ -391,28 +391,28 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     //  outMethodBody.puts("//" + dataType.toString() + " __ " + assignType.toString())
     dataType match {
       case t: ReadableType =>
-        s"ks_stream_read_${t.apiCall(defEndian)}(stream, &"
+        s"CHECK(ks_stream_read_${t.apiCall(defEndian)}(stream, &"
       case blt: BytesLimitType =>
-        s"ks_stream_read_bytes(stream, ${expression(blt.size)}, &"
+        s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &"
       case _: BytesEosType =>
         s"$io.ReadBytesFull()"
       case BytesTerminatedType(terminator, include, consume, eosError, _) =>
         s"$io.ReadBytesTerm($terminator, $include, $consume, $eosError)"
       case BitsType1(bitEndian) =>
-        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1, &"
+        s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1, &"
       case BitsType(width: Int, bitEndian) =>
-        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &"
+        s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &"
       case t: UserTypeFromBytes =>
         val name = t.name.mkString(".").toLowerCase()
-        s"ks_stream_create_from_bytes(&_io__NAME_, _raw__NAME_);\n" +
+        s"CHECK(ks_stream_create_from_bytes(&_io__NAME_, _raw__NAME_));\n" +
             s"    data->_NAME_ = malloc(sizeof(ksx_$name));\n" +
             s"    ks_bytes_destroy(_raw__NAME_);\n" +
-            s"    ksx_read_$name(root_stream, root_data, _io__NAME_, "
+            s"    CHECK(ksx_read_$name(root_stream, root_data, _io__NAME_, "
       case t: UserTypeInstream =>
         val name = t.name.mkString(".").toLowerCase()
         s"/* Subtype */\n" +
             s"    data->_NAME_ = malloc(sizeof(ksx_$name));\n" +
-            s"    ksx_read_$name(root_stream, root_data, stream, "
+            s"    CHECK(ksx_read_$name(root_stream, root_data, stream, "
     }
   }
 
