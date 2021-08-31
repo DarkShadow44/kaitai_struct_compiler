@@ -172,7 +172,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
     val suffix = attrType match {
       case t: UserType => "*"
-      case EnumType(name, _) => "*"
       case at: ArrayType => "*"
       case _ => ""
     }
