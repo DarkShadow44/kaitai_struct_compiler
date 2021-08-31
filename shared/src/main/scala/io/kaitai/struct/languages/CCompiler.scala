@@ -72,7 +72,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (rootClassCounter == 1) {
 		outSrcDefs.puts
 		outHdrRoot.puts
-		outHdrRoot.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, struct ksx_${name}_* data);")
+		outHdrRoot.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_${name}* data);")
 		outSrc.puts
 		outSrc.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_$name* data)")
 		outSrc.puts("{")
@@ -86,14 +86,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 		outHdrRoot.inc
         outHdrRoot.puts("ks_handle* _handle;")
 		outHdrDefs.puts
-		outHdrDefs.puts(s"struct ksx_${name}_;")
+		outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
 	} else {
 		outHdr.puts
 		outHdr.puts(s"typedef struct ksx_${name}_")
 		outHdr.puts("{")
 		outHdr.inc
 		outHdr.puts("ks_handle* _handle;")
-		outHdrDefs.puts(s"struct ksx_${name}_;")
+		outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
 	}
   }
 
@@ -405,13 +405,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case t: UserTypeFromBytes =>
         val name = t.name.mkString(".").toLowerCase()
         s"CHECK(ks_stream_create_from_bytes(&_io__NAME_, _raw__NAME_));\n" +
-            s"    data->_NAME_ = malloc(sizeof(ksx_$name));\n" +
+            s"    data->_NAME_ = calloc(1, sizeof(ksx_$name));\n" +
             s"    ks_bytes_destroy(_raw__NAME_);\n" +
             s"    CHECK(ksx_read_$name(root_stream, root_data, _io__NAME_, "
       case t: UserTypeInstream =>
         val name = t.name.mkString(".").toLowerCase()
         s"/* Subtype */\n" +
-            s"    data->_NAME_ = malloc(sizeof(ksx_$name));\n" +
+            s"    data->_NAME_ = calloc(1, sizeof(ksx_$name));\n" +
             s"    CHECK(ksx_read_$name(root_stream, root_data, stream, "
     }
   }
