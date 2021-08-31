@@ -35,13 +35,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outSrc = new StringLanguageOutputWriter(indent)
   val outHdr = new StringLanguageOutputWriter(indent)
   val outHdrRoot = new StringLanguageOutputWriter(indent)
+  val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
 
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
     Map(
       outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrc.result),
-      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrRoot.result + outHdr.result)
+      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdrRoot.result + outHdr.result)
     )
   }
 
@@ -89,10 +90,20 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 		outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
 	} else {
 		outHdr.puts
+        outHdr.puts(s"typedef struct ksx_array_${name}_")
+        outHdr.puts("{")
+        outHdr.inc
+        outHdr.puts("ks_handle* _handle;")
+        outHdr.puts("int64_t size;")
+        outHdr.puts(s"ksx_$name* data;")
+        outHdr.dec
+        outHdr.puts(s"} ksx_array_$name;")
+        outHdr.puts
 		outHdr.puts(s"typedef struct ksx_${name}_")
 		outHdr.puts("{")
 		outHdr.inc
 		outHdr.puts("ks_handle* _handle;")
+        outHdrDefs.puts(s"typedef struct ksx_array_${name}_ ksx_array_${name};")
 		outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
 	}
   }
@@ -159,12 +170,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     {
       return
     }
-    val prefix = attrType match {
-      case t: UserType => "struct "
-      case _ => ""
-    }
     val suffix = attrType match {
-      case t: UserType => "_*"
+      case t: UserType => "*"
+      case EnumType(name, _) => "*"
+      case at: ArrayType => "*"
       case _ => ""
     }
     val isSubtypeByte = attrName match {
@@ -175,9 +184,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         return
     }
 	if (rootClassCounter == 1) {
-		outHdrRoot.puts(s"$prefix${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
+		outHdrRoot.puts(s"${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
 	} else {
-		outHdr.puts(s"$prefix${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
+		outHdr.puts(s"${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
 	}
     
   }
@@ -403,13 +412,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case BitsType(width: Int, bitEndian) =>
         s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &"
       case t: UserTypeFromBytes =>
-        val name = t.name.mkString(".").toLowerCase()
+        val name = makeName(t.name)
         s"CHECK(ks_stream_create_from_bytes(&_io__NAME_, _raw__NAME_));\n" +
             s"    data->_NAME_ = calloc(1, sizeof(ksx_$name));\n" +
             s"    ks_bytes_destroy(_raw__NAME_);\n" +
             s"    CHECK(ksx_read_$name(root_stream, root_data, _io__NAME_, "
       case t: UserTypeInstream =>
-        val name = t.name.mkString(".").toLowerCase()
+        val name = makeName(t.name)
         s"/* Subtype */\n" +
             s"    data->_NAME_ = calloc(1, sizeof(ksx_$name));\n" +
             s"    CHECK(ksx_read_$name(root_stream, root_data, stream, "
@@ -558,19 +567,30 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   def flagForInstName(ksName: Identifier) = s"f_${idToStr(ksName)}"
 
   override def enumDeclaration(curClass: String, enumName: String, enumColl: Seq[(Long, String)]): Unit = {
-    val enumClass = "KSX_" + type2class(enumName).toUpperCase()
+    val enumClass = type2class(enumName).toLowerCase()
+    val enumClass2 = "ksx_" + enumClass
 
-    outHdrDefs.puts
-    outHdrDefs.puts(s"typedef enum ${enumClass}_")
-    outHdrDefs.puts(s"{")
-    outHdrDefs.inc
+    outHdrEnums.puts
+    outHdrEnums.puts(s"typedef enum ${enumClass2}_")
+    outHdrEnums.puts(s"{")
+    outHdrEnums.inc
 
     enumColl.foreach { case (id, label) =>
-      outHdrDefs.puts(s"${enumClass}_${label.toUpperCase()} = $id,")
+      outHdrEnums.puts(s"${enumClass2.toUpperCase()}_${label.toUpperCase()} = $id,")
     }
 
-    outHdrDefs.dec
-    outHdrDefs.puts(s"} $enumClass;")
+    outHdrEnums.dec
+    outHdrEnums.puts(s"} $enumClass2;")
+
+    outHdrEnums.puts
+    outHdrEnums.puts(s"typedef struct ksx_array_${enumClass}_")
+    outHdrEnums.puts("{")
+    outHdrEnums.inc
+    outHdrEnums.puts("ks_handle* _handle;")
+    outHdrEnums.puts("int64_t size;")
+    outHdrEnums.puts(s"ksx_$enumClass* data;")
+    outHdrEnums.dec
+    outHdrEnums.puts(s"} ksx_array_$enumClass;")
   }
 
   def idToStr(id: Identifier): String = {
@@ -656,10 +676,16 @@ object CCompiler extends LanguageCompilerStatic
       case KaitaiStructType | CalcKaitaiStructType => kstructName
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
-      case t: UserType => "ksx_" + t.name.mkString(".").toLowerCase()
-      case EnumType(name, _) => "KSX_" + name.mkString(".").toUpperCase()
+      case t: UserType => "ksx_" + makeName(t.name)
+      case EnumType(name, _) => "ksx_" + makeName(name)
 
-      case at: ArrayType => s"List<${kaitaiType2NativeType(at.elType)}>"
+      case at: ArrayType => {
+        at.elType match {
+          case t: UserType => s"ksx_array_${makeName(t.name)}"
+          case EnumType(name, _) => s"ksx_array_${makeName(name)}"
+          case _ => s"ks_array_${kaitaiType2NativeType(at.elType)}"
+        }
+      }
 
       case st: SwitchType => kaitaiType2NativeType(st.combinedType)
     }
@@ -668,6 +694,8 @@ object CCompiler extends LanguageCompilerStatic
   def types2class(typeName: Ast.typeId): String =
     types2class(typeName.names)
   def types2class(names: Iterable[String]) = names.map(type2class).mkString(".").toLowerCase()
+
+  def makeName(names: Iterable[String]) = names.mkString(".").toLowerCase()
 
   override def kstructName = "KaitaiStruct"
   override def kstreamName = "KaitaiStream"
