@@ -636,7 +636,7 @@ object CCompiler extends LanguageCompilerStatic
       case FloatMultiType(Width4, _) => "float"
       case FloatMultiType(Width8, _) => "double"
 
-      case BitsType(_, _) => "uint32_t"
+      case BitsType(_, _) => "uint64_t"
 
       case CalcIntType => "int"
       case CalcFloatType => "double"
