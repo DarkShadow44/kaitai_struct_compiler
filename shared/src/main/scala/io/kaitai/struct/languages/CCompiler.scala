@@ -36,13 +36,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdr = new StringLanguageOutputWriter(indent)
   val outHdrRoot = new StringLanguageOutputWriter(indent)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
+  val outHdrArrays = new StringLanguageOutputWriter(indent)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
 
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
     Map(
       outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrc.result),
-      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdrRoot.result + outHdr.result)
+      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdrRoot.result + outHdr.result + outHdrArrays.result)
     )
   }
 
@@ -64,48 +65,60 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     importListSrc.addLocal(outFileNameHeader(topClassName))
 
     importListHdr.addKaitai("kaitaistruct.h")
+
+    outHdrDefs.puts
+    outHdrDefs.puts("/* Forward declarations */")
+
+    outHdrArrays.puts
+    outHdrArrays.puts("/* Array structures */")
+
+    outHdrEnums.puts
+    outHdrEnums.puts("/* Enums */")
+
+    outHdrRoot.puts
+    outHdrRoot.puts("/* Main structures */")
   }
 
   override def fileFooter(topClassName: String): Unit = {}
 
   override def classHeader(name: String): Unit = {
-	rootClassCounter += 1
+    rootClassCounter += 1
     if (rootClassCounter == 1) {
-		outSrcDefs.puts
-		outHdrRoot.puts
-		outHdrRoot.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_${name}* data);")
-		outSrc.puts
-		outSrc.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_$name* data)")
-		outSrc.puts("{")
-		outSrc.inc
-		outSrc.puts(s"return ksx_read_$name(stream, data, stream, data);")
-		outSrc.dec
-		outSrc.puts("}")
-		outHdrRoot.puts
-		outHdrRoot.puts(s"typedef struct ksx_${name}_")
-		outHdrRoot.puts("{")
-		outHdrRoot.inc
-        outHdrRoot.puts("ks_handle* _handle;")
-		outHdrDefs.puts
-		outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
-	} else {
-		outHdr.puts
-        outHdr.puts(s"typedef struct ksx_array_${name}_")
-        outHdr.puts("{")
-        outHdr.inc
-        outHdr.puts("ks_handle* _handle;")
-        outHdr.puts("int64_t size;")
-        outHdr.puts(s"ksx_$name* data;")
-        outHdr.dec
-        outHdr.puts(s"} ksx_array_$name;")
-        outHdr.puts
-		outHdr.puts(s"typedef struct ksx_${name}_")
-		outHdr.puts("{")
-		outHdr.inc
-		outHdr.puts("ks_handle* _handle;")
-        outHdrDefs.puts(s"typedef struct ksx_array_${name}_ ksx_array_${name};")
-		outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
-	}
+      outSrcDefs.puts
+      outHdrRoot.puts
+      outHdrRoot.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_${name}* data);")
+      outSrc.puts
+      outSrc.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_$name* data)")
+      outSrc.puts("{")
+      outSrc.inc
+      outSrc.puts(s"return ksx_read_$name(stream, data, stream, data);")
+      outSrc.dec
+      outSrc.puts("}")
+      outHdrRoot.puts
+      outHdrRoot.puts(s"typedef struct ksx_${name}_")
+      outHdrRoot.puts("{")
+      outHdrRoot.inc
+      outHdrRoot.puts("ks_handle* _handle;")
+      outHdrDefs.puts
+      outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
+    } else {
+      outHdrArrays.puts
+      outHdrArrays.puts(s"typedef struct ksx_array_${name}_")
+      outHdrArrays.puts("{")
+      outHdrArrays.inc
+      outHdrArrays.puts("ks_handle* _handle;")
+      outHdrArrays.puts("int64_t size;")
+      outHdrArrays.puts(s"ksx_$name* data;")
+      outHdrArrays.dec
+      outHdrArrays.puts(s"} ksx_array_$name;")
+      outHdr.puts
+      outHdr.puts(s"typedef struct ksx_${name}_")
+      outHdr.puts("{")
+      outHdr.inc
+      outHdr.puts("ks_handle* _handle;")
+      outHdrDefs.puts(s"typedef struct ksx_array_${name}_ ksx_array_${name};")
+      outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
+    }
   }
 
   override def classFooter(name: String): Unit = {
@@ -603,15 +616,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrEnums.dec
     outHdrEnums.puts(s"} $enumClass2;")
 
-    outHdrEnums.puts
-    outHdrEnums.puts(s"typedef struct ksx_array_${enumClass}_")
-    outHdrEnums.puts("{")
-    outHdrEnums.inc
-    outHdrEnums.puts("ks_handle* _handle;")
-    outHdrEnums.puts("int64_t size;")
-    outHdrEnums.puts(s"ksx_$enumClass* data;")
-    outHdrEnums.dec
-    outHdrEnums.puts(s"} ksx_array_$enumClass;")
+    outHdrArrays.puts
+    outHdrArrays.puts(s"typedef struct ksx_array_${enumClass}_")
+    outHdrArrays.puts("{")
+    outHdrArrays.inc
+    outHdrArrays.puts("ks_handle* _handle;")
+    outHdrArrays.puts("int64_t size;")
+    outHdrArrays.puts(s"ksx_$enumClass* data;")
+    outHdrArrays.dec
+    outHdrArrays.puts(s"} ksx_array_$enumClass;")
+    outHdrDefs.puts(s"typedef struct ksx_array_${enumClass}_ ksx_array_$enumClass;")
   }
 
   def idToStr(id: Identifier): String = {
