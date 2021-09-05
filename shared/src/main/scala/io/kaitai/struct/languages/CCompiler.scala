@@ -337,7 +337,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val name = privateMemberName(RawIdentifier(id))
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
-    outMethodBody.puts("/* Array */")
+    outMethodBody.puts("/* Array (repeat-expr) */")
     outMethodHead.puts(s"int64_t $pos;")
 
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
@@ -356,38 +356,39 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def condRepeatExprFooter: Unit = fileFooter(null)
 
   override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
-    importList.add("System.Collections.Generic")
+    val pos = "_pos_" + privateMemberName(id)
+    val name = privateMemberName(RawIdentifier(id))
+    val dataTypeArray = ArrayTypeInStream(dataType)
+    val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    outMethodBody.puts("/* Array (repeat-until) */")
+    outMethodHead.puts(s"int64_t $pos;")
 
-    if (needRaw.level >= 1)
-      out.puts(s"${privateMemberName(RawIdentifier(id))} = new List<byte[]>();")
-    if (needRaw.level >= 2)
-      out.puts(s"${privateMemberName(RawIdentifier(RawIdentifier(id)))} = new List<byte[]>();")
-    out.puts(s"${privateMemberName(id)} = new ${kaitaiType2NativeType(ArrayTypeInStream(dataType))}();")
-    out.puts("{")
-    out.inc
-    out.puts("var i = 0;")
-    out.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")};")
-    out.puts("do {")
-    out.inc
+    outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
+    outMethodBody.puts(s"data->$name->size = 0;")
+    outMethodBody.puts(s"data->$name->data = 0;")
+    outMethodBody.puts(s"do")
+    outMethodBody.puts("{")
+    outMethodBody.inc
   }
 
   override def handleAssignmentRepeatUntil(id: Identifier, expr: String, isRaw: Boolean): Unit = {
-    val (typeDecl, tempVar) = if (isRaw) {
-      ("byte[] ", translator.doName(Identifier.ITERATOR2))
-    } else {
-      ("", translator.doName(Identifier.ITERATOR))
-    }
-    out.puts(s"$typeDecl$tempVar = $expr;")
-    out.puts(s"${privateMemberName(id)}.Add($tempVar);")
+    val name = privateMemberName(RawIdentifier(id))
+    val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)})"
+    outMethodBody.puts(s"data->$name->size++;")
+    outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
+    outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, true)
   }
 
   override def condRepeatUntilFooter(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
+    val name = privateMemberName(RawIdentifier(id))
+    val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    val pos = "_pos_" + privateMemberName(id)
     typeProvider._currentIteratorType = Some(dataType)
-    out.puts("i++;")
-    out.dec
-    out.puts(s"} while (!(${expression(untilExpr)}));")
-    out.dec
-    out.puts("}")
+    outMethodBody.puts(s"$pos++;")
+    outMethodBody.dec
+    outMethodBody.puts(s"} while (!(${expression(untilExpr)}));")
+    outMethodBody.puts(s"CHECK(ks_allocate_handle_array(&data->$name->_handle, stream, data->$name, $arrayTypeSize, data->$name->data, data->$name->size));");
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
