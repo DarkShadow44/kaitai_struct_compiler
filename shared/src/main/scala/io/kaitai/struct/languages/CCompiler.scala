@@ -350,7 +350,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentRepeatExpr(id: Identifier, expr: String): Unit = {
-    out.puts(s"${privateMemberName(id)}.Add($expr);")
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, true)
   }
 
   override def condRepeatExprFooter: Unit = fileFooter(null)
@@ -391,13 +391,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast)
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, false)
   }
 
-  def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian])
+  def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian], isArray: Boolean)
   {
     // TODO: Use io!
     val name = privateMemberName(id)
+    var nameTarget = name
+    if (isArray) {
+        nameTarget = s"$name->data[_pos_$name]"
+    }
     // outMethodBody.puts("//" + dataType.toString() + " __ " + assignType.toString())
     val targetType = kaitaiType2NativeType(dataType)
 
@@ -405,7 +409,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case t: ReadableType =>
         outMethodHead.puts(s"$targetType $name;")
         outMethodBody.puts(s"CHECK(ks_stream_read_${t.apiCall(defEndian)}(stream, &$name));")
-        outMethodBody.puts(s"data->$name = $name;")
+        outMethodBody.puts(s"data->$nameTarget = $name;")
       case blt: BytesLimitType =>
         id match {
           case RawIdentifier(_) =>
@@ -423,22 +427,30 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case BitsType1(bitEndian) =>
         outMethodHead.puts(s"$targetType $name;")
         outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1, &$name));")
-        outMethodBody.puts(s"data->$name = $name;")
+        outMethodBody.puts(s"data->$nameTarget = $name;")
       case BitsType(width: Int, bitEndian) =>
         outMethodHead.puts(s"$targetType $name;")
         outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &$name));")
-        outMethodBody.puts(s"data->$name = $name;")
+        outMethodBody.puts(s"data->$nameTarget = $name;")
       case t: UserTypeFromBytes =>
         val typeName = makeName(t.name)
         outMethodBody.puts(s"CHECK(ks_stream_create_from_bytes(&_io_$name, _raw_$name));")
-        outMethodBody.puts(s"data->$name = calloc(1, sizeof(ksx_$typeName));")
         outMethodBody.puts(s"ks_bytes_destroy(_raw_$name);")
-        outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, _io_$name, data->$name));")
+        if (isArray) {
+          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, _io_$name, &data->$nameTarget));")
+        } else {
+          outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
+          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, _io_$name, data->$nameTarget));")
+        }
       case t: UserTypeInstream =>
         val typeName = makeName(t.name)
         outMethodBody.puts(s"/* Subtype */")
-        outMethodBody.puts(s"data->$name = calloc(1, sizeof(ksx_$typeName));")
-        outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$name));")
+        if (isArray) {
+            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, &data->$nameTarget));")
+        } else {
+            outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
+            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$nameTarget));")
+        }
     }
   }
 
