@@ -366,6 +366,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
+    outMethodBody.puts("{")
+    outMethodBody.inc
+    outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")} = {0};")
     outMethodBody.puts(s"do")
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -373,11 +376,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def handleAssignmentRepeatUntil(id: Identifier, expr: String, isRaw: Boolean): Unit = {
     val name = privateMemberName(RawIdentifier(id))
+    val nameTemp = translator.doName(Identifier.ITERATOR)
     val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)})"
     outMethodBody.puts(s"data->$name->size++;")
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, true)
+    outMethodBody.puts(s"$nameTemp = data->$name->data[_pos_$name];");
   }
 
   override def condRepeatUntilFooter(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
@@ -388,6 +393,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"$pos++;")
     outMethodBody.dec
     outMethodBody.puts(s"} while (!(${expression(untilExpr)}));")
+    outMethodBody.dec
+    outMethodBody.puts("}")
     outMethodBody.puts(s"CHECK(ks_allocate_handle_array(&data->$name->_handle, stream, data->$name, $arrayTypeSize, data->$name->data, data->$name->size));");
   }
 

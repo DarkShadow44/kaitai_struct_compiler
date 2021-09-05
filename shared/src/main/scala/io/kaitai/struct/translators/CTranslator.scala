@@ -52,7 +52,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
       s match {
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
-        case _ => s"M$s"
+        case _ => s"_temp$s"
       }
     } else {
       s
@@ -124,6 +124,12 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def arrayMax(a: Ast.expr): String = {
     s"${translate(a)}.Max()"
   }
-  override def anyField(value: expr, attrName: String): String =
-    s"data->${translate(value)}->${doName(attrName)}"
+  override def anyField(value: expr, attrName: String): String = {
+    val left = translate(value);
+    if (left == doName("_")) {
+      s"$left.${doName(attrName)}"
+    } else {
+      s"data->$left->${doName(attrName)}"
+    }
+  }
 }
