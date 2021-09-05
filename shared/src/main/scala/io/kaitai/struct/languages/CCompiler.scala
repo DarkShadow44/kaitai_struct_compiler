@@ -79,7 +79,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrRoot.puts("/* Main structures */")
   }
 
-  override def fileFooter(topClassName: String): Unit = {}
+  override def fileFooter(topClassName: String): Unit = {
+    outMethodBody.dec
+    outMethodBody.puts("}")
+  }
 
   override def classHeader(name: String): Unit = {
     rootClassCounter += 1
@@ -329,16 +332,21 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, repeatExpr: expr): Unit = {
-    importList.add("System.Collections.Generic")
+    val pos = "_pos_" + privateMemberName(id)
+    val len = expression(repeatExpr)
+    val name = privateMemberName(RawIdentifier(id))
+    val dataTypeArray = ArrayTypeInStream(dataType)
+    val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    outMethodBody.puts("/* Array */")
+    outMethodHead.puts(s"int64_t $pos;")
 
-    if (needRaw.level >= 1)
-      out.puts(s"${privateMemberName(RawIdentifier(id))} = new List<byte[]>((int) (${expression(repeatExpr)}));")
-    if (needRaw.level >= 2)
-      out.puts(s"${privateMemberName(RawIdentifier(RawIdentifier(id)))} = new List<byte[]>((int) (${expression(repeatExpr)}));")
-    out.puts(s"${privateMemberName(id)} = new ${kaitaiType2NativeType(ArrayTypeInStream(dataType))}((int) (${expression(repeatExpr)}));")
-    out.puts(s"for (var i = 0; i < ${expression(repeatExpr)}; i++)")
-    out.puts("{")
-    out.inc
+    outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
+    outMethodBody.puts(s"data->$name->size = $len;")
+    outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}), $len);")
+    outMethodBody.puts(s"CHECK(ks_allocate_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"for ($pos = 0; $pos < $len; $pos++)")
+    outMethodBody.puts("{")
+    outMethodBody.inc
   }
 
   override def handleAssignmentRepeatExpr(id: Identifier, expr: String): Unit = {
@@ -723,6 +731,30 @@ object CCompiler extends LanguageCompilerStatic
       }
 
       case st: SwitchType => kaitaiType2NativeType(st.combinedType)
+    }
+  }
+
+  def getKaitaiTypeEnumAndSize(attrType: DataType): String = {
+    attrType match {
+      case Int1Type(false) => "KS_TYPE_ARRAY_INT, 1"
+      case IntMultiType(false, Width2, _) => "KS_TYPE_ARRAY_INT, 2"
+      case IntMultiType(false, Width4, _) => "KS_TYPE_ARRAY_INT, 4"
+      case IntMultiType(false, Width8, _) => "KS_TYPE_ARRAY_INT, 8"
+
+      case Int1Type(true) => "KS_TYPE_ARRAY_INT, 1"
+      case IntMultiType(true, Width2, _) => "KS_TYPE_ARRAY_INT, 2"
+      case IntMultiType(true, Width4, _) => "KS_TYPE_ARRAY_INT, 4"
+      case IntMultiType(true, Width8, _) => "KS_TYPE_ARRAY_INT, 8"
+
+      case FloatMultiType(Width4, _) => "KS_TYPE_ARRAY_FLOAT, 4"
+      case FloatMultiType(Width8, _) => "KS_TYPE_ARRAY_FLOAT, 8"
+
+      case BitsType(_, _) => "KS_TYPE_ARRAY_INT, 8"
+
+      case t: UserType => s"KS_TYPE_ARRAY_INT, sizeof(ksx_${makeName(t.name)})"
+      case EnumType(name, _) => s"KS_TYPE_ARRAY_INT, sizeof(ksx_${makeName(name)})"
+
+      case _ => "KS_TYPE_UNKNOWN, 0"
     }
   }
 
