@@ -343,7 +343,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
     outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}), $len);")
-    outMethodBody.puts(s"CHECK(ks_allocate_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECK(ks_allocate_handle_array(&data->$name->_handle, stream, data->$name, $arrayTypeSize, data->$name->data, $len));");
     outMethodBody.puts(s"for ($pos = 0; $pos < $len; $pos++)")
     outMethodBody.puts("{")
     outMethodBody.inc
