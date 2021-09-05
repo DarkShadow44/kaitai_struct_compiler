@@ -125,5 +125,5 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"${translate(a)}.Max()"
   }
   override def anyField(value: expr, attrName: String): String =
-    s"${translate(value)}->${doName(attrName)}"
+    s"data->${translate(value)}->${doName(attrName)}"
 }
