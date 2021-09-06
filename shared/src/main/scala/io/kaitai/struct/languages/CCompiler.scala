@@ -60,7 +60,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outHdrHeader.puts(s"// $headerComment")
     outHdrHeader.puts
-    outHdrHeader.puts("#define KS_DEPEND_ON_INTERNALS")
 
     importListSrc.addLocal(outFileNameHeader(topClassName))
 
@@ -101,7 +100,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outHdrRoot.puts(s"typedef struct ksx_${name}_")
       outHdrRoot.puts("{")
       outHdrRoot.inc
-      outHdrRoot.puts("ks_handle* _handle;")
+      outHdrRoot.puts("ks_handle _handle;")
       outHdrDefs.puts
       outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
     } else {
@@ -109,7 +108,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outHdrArrays.puts(s"typedef struct ksx_array_${name}_")
       outHdrArrays.puts("{")
       outHdrArrays.inc
-      outHdrArrays.puts("ks_handle* _handle;")
+      outHdrArrays.puts("ks_handle _handle;")
       outHdrArrays.puts("int64_t size;")
       outHdrArrays.puts(s"ksx_$name* data;")
       outHdrArrays.dec
@@ -118,7 +117,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outHdr.puts(s"typedef struct ksx_${name}_")
       outHdr.puts("{")
       outHdr.inc
-      outHdr.puts("ks_handle* _handle;")
+      outHdr.puts("ks_handle _handle;")
       outHdrDefs.puts(s"typedef struct ksx_array_${name}_ ksx_array_${name};")
       outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
     }
@@ -139,7 +138,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data);");
 	outSrc.puts
     outSrc.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data)")
-    outMethodBody.puts(s"    CHECK(ks_allocate_handle(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$name)));")
+    outMethodBody.puts(s"    CHECK(ks_init_handle(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$name)));")
   }
 
   override def classConstructorFooter: Unit = {}
@@ -343,7 +342,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
     outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}), data->$name->size);")
-    outMethodBody.puts(s"CHECK(ks_allocate_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECK(ks_init_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -366,7 +365,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
-    outMethodBody.puts(s"CHECK(ks_allocate_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECK(ks_init_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")} = {0};")
@@ -419,8 +418,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case blt: BytesLimitType =>
         id match {
           case RawIdentifier(_) =>
-            outMethodHead.puts(s"ks_bytes* _raw_$name;")
-            outMethodHead.puts(s"ks_stream* _io_$name;")
+            outMethodHead.puts(s"ks_bytes _raw_$name;")
+            outMethodHead.puts(s"ks_stream _io_$name;")
             outMethodBody.puts(s"/* Subtype with substream */")
             outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &_raw_$name));")
           case _ =>
@@ -440,13 +439,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"data->$nameTarget = $name;")
       case t: UserTypeFromBytes =>
         val typeName = makeName(t.name)
-        outMethodBody.puts(s"CHECK(ks_stream_create_from_bytes(&_io_$name, _raw_$name));")
-        outMethodBody.puts(s"ks_bytes_destroy(_raw_$name);")
+        outMethodBody.puts(s"CHECK(ks_stream_init_from_bytes(&_io_$name, &_raw_$name));")
         if (isArray) {
-          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, _io_$name, &data->$nameTarget));")
+          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, &_io_$name, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, _io_$name, data->$nameTarget));")
+          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, &_io_$name, data->$nameTarget));")
         }
       case t: UserTypeInstream =>
         val typeName = makeName(t.name)
@@ -731,7 +729,7 @@ object CCompiler extends LanguageCompilerStatic
       case _: BooleanType => "bool"
 
       case _: StrType => "char*"
-      case _: BytesType => "ks_bytes*"
+      case _: BytesType => "ks_bytes"
 
       case AnyType => "void*"
       case KaitaiStructType | CalcKaitaiStructType => kstructName
