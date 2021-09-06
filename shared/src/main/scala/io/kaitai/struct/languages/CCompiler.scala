@@ -343,7 +343,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
     outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}), data->$name->size);")
-    outMethodBody.puts(s"CHECK(ks_allocate_handle_array(&data->$name->_handle, stream, data->$name, $arrayTypeSize, data->$name->data, data->$name->size));");
+    outMethodBody.puts(s"CHECK(ks_allocate_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -366,6 +366,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
+    outMethodBody.puts(s"CHECK(ks_allocate_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")} = {0};")
@@ -386,8 +387,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def condRepeatUntilFooter(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
-    val name = privateMemberName(RawIdentifier(id))
-    val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
     val pos = "_pos_" + privateMemberName(id)
     typeProvider._currentIteratorType = Some(dataType)
     outMethodBody.puts(s"$pos++;")
@@ -395,7 +394,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"} while (!(${expression(untilExpr)}));")
     outMethodBody.dec
     outMethodBody.puts("}")
-    outMethodBody.puts(s"CHECK(ks_allocate_handle_array(&data->$name->_handle, stream, data->$name, $arrayTypeSize, data->$name->data, data->$name->size));");
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
