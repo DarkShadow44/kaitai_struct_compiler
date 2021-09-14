@@ -127,4 +127,5 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def anyField(value: expr, attrName: String): String = {
       s"${translate(value)}->${doName(attrName)}"
   }
+  override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
 }
