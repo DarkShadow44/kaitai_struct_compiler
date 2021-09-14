@@ -90,7 +90,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def floatToInt(v: expr): String =
     s"(long) (${translate(v)})"
   override def intToStr(i: expr, base: expr): String = {
-    s"Convert.ToString((long) (${translate(i)}), ${translate(base)})"
+    s"ks_string_from_int(${translate(i)}, ${translate(base)})"
   }
   override def bytesToStr(bytesExpr: String, encoding: Ast.expr): String =
     s"System.Text.Encoding.GetEncoding(${translate(encoding)}).GetString($bytesExpr)"

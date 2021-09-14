@@ -718,7 +718,7 @@ object CCompiler extends LanguageCompilerStatic
       case CalcFloatType => "double"
       case _: BooleanType => "bool"
 
-      case _: StrType => "char*"
+      case _: StrType => "ks_string"
       case _: BytesType => "ks_bytes"
 
       case AnyType => "void*"
@@ -755,9 +755,11 @@ object CCompiler extends LanguageCompilerStatic
       case FloatMultiType(Width4, _) => "KS_TYPE_ARRAY_FLOAT, 4"
       case FloatMultiType(Width8, _) => "KS_TYPE_ARRAY_FLOAT, 8"
 
+      case _: StrType => "KS_TYPE_ARRAY_STRING, 0"
+
       case BitsType(_, _) => "KS_TYPE_ARRAY_INT, 8"
 
-      case t: UserType => s"KS_TYPE_ARRAY_INT, sizeof(ksx_${makeName(t.name)})"
+      case t: UserType => s"KS_TYPE_ARRAY_USERTYPE, sizeof(ksx_${makeName(t.name)})"
       case EnumType(name, _) => s"KS_TYPE_ARRAY_INT, sizeof(ksx_${makeName(name)})"
 
       case _ => "KS_TYPE_UNKNOWN, 0"
