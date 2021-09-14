@@ -40,6 +40,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
   var outMethodBodyInstance = new StringLanguageOutputWriter(indent)
 
+  def printdbg(s: String) : Unit = outMethodBodyInstance.puts("//" + s)
+
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
     Map(
