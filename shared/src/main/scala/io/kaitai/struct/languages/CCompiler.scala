@@ -143,7 +143,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data);");
 	outSrc.puts
     outSrc.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data)")
-    outMethodBody.puts(s"    CHECK(ks_init_handle(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$name)));")
+    outMethodBody.puts(s"    CHECK(ks_handle_init(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$name)));")
   }
 
   override def classConstructorFooter: Unit = {}
@@ -346,7 +346,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
     outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}), data->$name->size);")
-    outMethodBody.puts(s"CHECK(ks_init_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECK(ks_handle_init(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -369,7 +369,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
-    outMethodBody.puts(s"CHECK(ks_init_handle(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECK(ks_handle_init(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")} = {0};")
