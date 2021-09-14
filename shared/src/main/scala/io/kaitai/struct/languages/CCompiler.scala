@@ -732,7 +732,7 @@ object CCompiler extends LanguageCompilerStatic
 
       case CalcIntType => "int"
       case CalcFloatType => "double"
-      case _: BooleanType => "bool"
+      case _: BooleanType => "ks_bool"
 
       case _: StrType => "ks_string"
       case _: BytesType => "ks_bytes"

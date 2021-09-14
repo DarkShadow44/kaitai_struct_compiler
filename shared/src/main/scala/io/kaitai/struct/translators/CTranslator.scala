@@ -131,4 +131,5 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
       s"${translate(value)}->$attrName"
   }
   override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
+  override def doBoolLiteral(n: Boolean): String = if (n) "1" else "0"
 }
