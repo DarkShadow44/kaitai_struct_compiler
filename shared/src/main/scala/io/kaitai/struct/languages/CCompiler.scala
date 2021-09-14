@@ -38,6 +38,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrArrays = new StringLanguageOutputWriter(indent)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
+  var outMethodBodyInstance = new StringLanguageOutputWriter(indent)
 
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
@@ -76,6 +77,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outHdrRoot.puts
     outHdrRoot.puts("/* Main structures */")
+
+    outMethodBodyInstance.inc
   }
 
   override def fileFooter(topClassName: String): Unit = {
@@ -175,9 +178,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outSrc.puts
     }
     outSrc.add(outMethodBody)
+    outSrc.add(outMethodBodyInstance)
     outSrc.puts("}")
     outMethodHead = new StringLanguageOutputWriter(indent)
     outMethodBody = new StringLanguageOutputWriter(indent)
+    outMethodBodyInstance = new StringLanguageOutputWriter(indent)
+    outMethodBodyInstance.inc
   }
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
@@ -287,13 +293,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def alignToByte(io: String): Unit =
     out.puts(s"$io.AlignToByte();")
 
-  override def instanceClear(instName: InstanceIdentifier): Unit = {
-    out.puts(s"${flagForInstName(instName)} = false;")
-  }
+  override def instanceClear(instName: InstanceIdentifier): Unit = {}
 
-  override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {
-    out.puts(s"${flagForInstName(instName)} = true;")
-  }
+  override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {}
 
   override def condIfHeader(expr: expr): Unit = {
     out.puts(s"if (${expression(expr)}) {")
@@ -407,6 +409,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (isArray) {
         nameTarget = s"$name->data[_pos_$name]"
     }
+    if (lastWasInstanceValue) {
+        lastWasInstanceValue = false
+        return
+    }
     // outMethodBody.puts("//" + dataType.toString() + " __ " + assignType.toString())
     val targetType = kaitaiType2NativeType(dataType)
 
@@ -474,6 +480,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   var assignTypeLast: DataType = null;
   var ioLast: String = "";
   var defEndianLast: Option[FixedEndian] = null
+  var lastWasInstanceValue : Boolean = false
 
   override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
     dataTypeLast = dataType;
@@ -587,8 +594,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   //</editor-fold>
 
   override def instanceDeclaration(attrName: InstanceIdentifier, attrType: DataType, isNullable: Boolean): Unit = {
-    out.puts(s"private bool ${flagForInstName(attrName)};")
-    out.puts(s"private ${kaitaiType2NativeType(attrType)} ${privateMemberName(attrName)};")
+    attributeDeclaration(attrName, attrType, isNullable)
   }
 
   override def instanceHeader(className: String, instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {
@@ -607,22 +613,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.puts("}")
   }
 
-  override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {
-    out.puts(s"if (${flagForInstName(instName)})")
-    out.inc
-    instanceReturn(instName, dataType)
-    out.dec
+  override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {}
+
+  override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {}
+
+  override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit = {
+    lastWasInstanceValue = true
+    val name = privateMemberName(instName)
+    val expr = expression(value)
+    outMethodBodyInstance.puts(s"data->$name = $expr;")
   }
-
-  override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {
-    out.puts(s"return ${privateMemberName(instName)};")
-  }
-
-  override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit =
-    // Perform explicit cast as unsigned integers can't be directly assigned to the default int type
-    handleAssignmentSimple(instName, s"(${kaitaiType2NativeType(dataType)}) (${expression(value)})")
-
-  def flagForInstName(ksName: Identifier) = s"f_${idToStr(ksName)}"
 
   override def enumDeclaration(curClass: String, enumName: String, enumColl: Seq[(Long, String)]): Unit = {
     val enumClass = type2class(enumName).toLowerCase()
