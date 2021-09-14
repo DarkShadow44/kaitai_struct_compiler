@@ -599,21 +599,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attributeDeclaration(attrName, attrType, isNullable)
   }
 
-  override def instanceHeader(className: String, instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {
-    out.puts(s"public ${kaitaiType2NativeType(dataType)} ${publicMemberName(instName)}")
-    out.puts("{")
-    out.inc
-    out.puts("get")
-    out.puts("{")
-    out.inc
-  }
+  override def instanceHeader(className: String, instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {}
 
-  override def instanceFooter: Unit = {
-    out.dec
-    out.puts("}")
-    out.dec
-    out.puts("}")
-  }
+  override def instanceFooter: Unit = {}
 
   override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {}
 
@@ -652,23 +640,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrArrays.dec
     outHdrArrays.puts(s"} ksx_array_$enumClass;")
     outHdrDefs.puts(s"typedef struct ksx_array_${enumClass}_ ksx_array_$enumClass;")
-  }
-
-  override def expression(e: Ast.expr): String = {
-    e match {
-      case call: Ast.expr.Attribute => {
-        val exprType = translator.detectType(call.value)
-        exprType match {
-          case t: UserType =>
-            "data->" + translator.translate(e)
-          case _ =>
-            translator.translate(e)
-        }
-      }
-      case _ =>
-        translator.translate(e)
-    }
-
   }
 
   def idToStr(id: Identifier): String = {

@@ -55,7 +55,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
         case _ => s"_temp$s"
       }
     } else {
-      s
+      s"data->$s"
     }
 
   override def doEnumByLabel(enumTypeAbs: List[String], label: String): String = label
