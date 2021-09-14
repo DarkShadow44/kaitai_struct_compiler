@@ -38,9 +38,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrArrays = new StringLanguageOutputWriter(indent)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
-  var outMethodBodyInstance = new StringLanguageOutputWriter(indent)
 
-  def printdbg(s: String) : Unit = outMethodBodyInstance.puts("//" + s)
+  def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
 
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
@@ -79,13 +78,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outHdrRoot.puts
     outHdrRoot.puts("/* Main structures */")
-
-    outMethodBodyInstance.inc
   }
 
   override def fileFooter(topClassName: String): Unit = {
-    outMethodBody.dec
-    outMethodBody.puts("}")
+   // outMethodBody.dec
+  //  outMethodBody.puts("}")
   }
 
   override def classHeader(name: String): Unit = {
@@ -139,7 +136,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 	rootClassCounter -= 1
   }
 
+  var currentClassName = ""
+
   override def classConstructorHeader(name: String, parentType: DataType, rootClassName: String, isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
+    currentClassName = rootClassName
 	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data);");
 	outSrc.puts
     outSrc.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data)")
@@ -179,13 +179,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (outMethodHead.result != "") {
         outSrc.puts
     }
+    outMethodBody.puts(s"ksx_read_${currentClassName}_instances(root_stream, root_data, stream, data);")
     outSrc.add(outMethodBody)
-    outSrc.add(outMethodBodyInstance)
+    outSrc.puts
     outSrc.puts("}")
     outMethodHead = new StringLanguageOutputWriter(indent)
     outMethodBody = new StringLanguageOutputWriter(indent)
-    outMethodBodyInstance = new StringLanguageOutputWriter(indent)
-    outMethodBodyInstance.inc
   }
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
@@ -599,9 +598,26 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attributeDeclaration(attrName, attrType, isNullable)
   }
 
+  def instanceStart(className: String): Unit = {
+    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$className* root_data, ks_stream* stream, ksx_$className* data);")
+    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$className* root_data, ks_stream* stream, ksx_$className* data)")
+    outSrc.puts("{")
+    outMethodHead.inc
+    outMethodBody.inc
+  }
+
   override def instanceHeader(className: String, instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {}
 
-  override def instanceFooter: Unit = {}
+  override def instanceFooter: Unit = {
+    outSrc.add(outMethodHead)
+    if (outMethodHead.result != "") {
+        outSrc.puts
+    }
+    outSrc.add(outMethodBody)
+    outSrc.puts("}")
+    outMethodHead = new StringLanguageOutputWriter(indent)
+    outMethodBody = new StringLanguageOutputWriter(indent)
+  }
 
   override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {}
 
@@ -611,7 +627,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     lastWasInstanceValue = true
     val name = privateMemberName(instName)
     val expr = expression(value)
-    outMethodBodyInstance.puts(s"data->$name = $expr;")
+    outMethodBody.puts(s"data->$name = $expr;")
   }
 
   override def enumDeclaration(curClass: String, enumName: String, enumColl: Seq[(Long, String)]): Unit = {

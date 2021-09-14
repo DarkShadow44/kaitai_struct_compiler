@@ -57,13 +57,6 @@ class CClassCompiler(
     }
   }
 
-  def printdbg(s: String) : Unit = {
-    lang match {
-      case c: CCompiler =>
-        c.printdbg(s)
-    }
-  }
-
   def getDependents(instSpec: InstanceSpec) : ListBuffer[String] = {
    val deps : ListBuffer[String] = ListBuffer()
     instSpec match {
@@ -112,9 +105,31 @@ class CClassCompiler(
   }
 
   override def compileInstances(curClass: ClassSpec) = {
+    val lang2 = lang.asInstanceOf[CCompiler]
+    lang2.instanceStart(curClass.name.last)
     val instances = getSortedInstances(curClass)
     for (name <- instances) {
       compileInstance(curClass.name, name, curClass.instances.get(name).get, curClass.meta.endian)
+    }
+    lang.instanceFooter
+  }
+
+  override def compileInstance(className: List[String], instName: InstanceIdentifier, instSpec: InstanceSpec, endian: Option[Endianness]): Unit = {
+    // Determine datatype
+    val dataType = instSpec.dataTypeComposite
+
+    compileInstanceDeclaration(instName, instSpec)
+
+    compileInstanceDoc(instName, instSpec)
+
+    instSpec match {
+      case vi: ValueInstanceSpec =>
+        lang.attrParseIfHeader(instName, vi.ifExpr)
+        lang.instanceCalculate(instName, dataType, vi.value)
+        lang.attrParseIfFooter(vi.ifExpr)
+        lang.instanceSetCalculated(instName)
+      case pi: ParseInstanceSpec =>
+        lang.attrParse(pi, instName, endian)
     }
   }
 }
