@@ -58,7 +58,10 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
       s"data->$s"
     }
 
-  override def doEnumByLabel(enumTypeAbs: List[String], label: String): String = label
+  override def doEnumByLabel(enumTypeAbs: List[String], label: String): String = {
+    val enumClass = enumTypeAbs.drop(1).mkString("_")
+    s"KSX_${enumClass}_$label".toUpperCase()
+  }
   override def doEnumById(enumTypeAbs: List[String], id: String): String = id
 
   override def doStrCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr) = {
