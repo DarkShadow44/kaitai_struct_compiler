@@ -36,6 +36,26 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     '\b' -> "\\b"
   )
 
+  override def doIntLiteral(n: BigInt): String = {
+    val suffix = if (n < -9223372036854775808L) {
+      "" // too low, no suffix would help anyway
+    } else if (n <= -2147483649L) {
+      "LL" // -9223372036854775808..–2147483649
+    } else if (n <= 2147483647L) {
+      "" // -2147483648..2147483647
+    } else if (n <= 4294967295L) {
+      "UL" // 2147483648..4294967295
+    } else if (n <= 9223372036854775807L) {
+      "LL" // 4294967296..9223372036854775807
+    } else if (n <= Utils.MAX_UINT64) {
+      "ULL" // 9223372036854775808..18446744073709551615
+    } else {
+      "" // too high, no suffix would help anyway
+    }
+
+    s"$n$suffix"
+  }
+
   override def strLiteralGenericCC(code: Char): String = strLiteralUnicode(code)
 
   override def numericBinOp(left: Ast.expr, op: Ast.operator, right: Ast.expr) = {
