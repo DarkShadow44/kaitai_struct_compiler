@@ -18,7 +18,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   }
 
   override def doByteArrayLiteral(arr: Seq[Byte]): String =
-    s"new byte[] { ${arr.map(_ & 0xff).mkString(", ")} }"
+    s"ks_bytes_from_data(${arr.size}, ${arr.map(_ & 0xff).mkString(", ")})"
   override def doByteArrayNonLiteral(elts: Seq[Ast.expr]): String =
     s"new byte[] { ${elts.map(translate).mkString(", ")} }"
 
