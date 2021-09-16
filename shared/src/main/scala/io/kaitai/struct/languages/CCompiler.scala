@@ -786,9 +786,15 @@ object CCompiler extends LanguageCompilerStatic
     types2class(typeName.names)
   def types2class(names: Iterable[String]) = names.map(type2class).mkString(".").toLowerCase()
 
-  def makeName(names: Iterable[String]) = names.mkString(".").toLowerCase()
+  def makeName(names: Iterable[String]) = {
+    val arr = names.toList
+    if (arr.length == 1)
+      arr.mkString("_").toLowerCase()
+    else
+      arr.drop(1).mkString("_").toLowerCase()
+  }
 
-  override def kstructName = "KaitaiStruct"
+  override def kstructName = "void*"
   override def kstreamName = "KaitaiStream"
   override def ksErrorName(err: KSError): String = err match {
     case EndOfStreamError => "EndOfStreamException"
