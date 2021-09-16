@@ -8,18 +8,17 @@ import io.kaitai.struct.exprlang.Ast.expr
 import io.kaitai.struct.format._
 import io.kaitai.struct.languages.components._
 import io.kaitai.struct.translators.{CTranslator, TypeDetector}
+import scala.collection.mutable.ListBuffer
 
 class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   extends LanguageCompiler(typeProvider, config)
-    with UpperCamelCaseClasses
     with ObjectOrientedLanguage
     with SingleOutputFile
     with AllocateIOLocalVar
     with EveryReadIsExpression
     with UniversalDoc
     with FixedContentsUsingArrayByteLiteral
-    with SwitchIfOps
-    with NoNeedForFullClassPath {
+    with SwitchIfOps {
   import CCompiler._
 
   val importListSrc = new CppImportList
@@ -34,10 +33,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outSrcDefs = new StringLanguageOutputWriter(indent)
   val outSrc = new StringLanguageOutputWriter(indent)
   val outHdr = new StringLanguageOutputWriter(indent)
-  val outHdrRoot = new StringLanguageOutputWriter(indent)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrArrays = new StringLanguageOutputWriter(indent)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
+  val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
 
@@ -45,7 +44,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val className = topClass.nameAsStr
     Map(
       outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrc.result),
-      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdrRoot.result + outHdr.result + outHdrArrays.result)
+      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdr.result + outHdrArrays.result)
     )
   }
 
@@ -54,7 +53,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   def outFileNameHeader(className: String): String = outFileName(className) + ".h"
 
   override def indent: String = "    "
-  var rootClassCounter: Int = 0
 
   override def fileHeader(topClassName: String): Unit = {
     outSrcHeader.puts(s"// $headerComment")
@@ -76,8 +74,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrEnums.puts
     outHdrEnums.puts("/* Enums */")
 
-    outHdrRoot.puts
-    outHdrRoot.puts("/* Main structures */")
+    outHdr.puts
+    outHdr.puts("/* Main structures */")
+
+    outSrcDefs.puts
+    outHdrDefs.puts
   }
 
   override def fileFooter(topClassName: String): Unit = {
@@ -85,12 +86,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   //  outMethodBody.puts("}")
   }
 
-  override def classHeader(name: String): Unit = {
-    rootClassCounter += 1
-    if (rootClassCounter == 1) {
-      outSrcDefs.puts
-      outHdrRoot.puts
-      outHdrRoot.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_${name}* data);")
+  override def classHeader(name: List[String]): Unit = {
+    val className = makeName(name)
+    outHdrStructs.append(new StringLanguageOutputWriter(indent))
+    val outStruct = outHdrStructs.last
+    if (outHdrStructs.length == 1) {
+      outHdr.puts
+      outHdr.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_${name}* data);")
       outSrc.puts
       outSrc.puts(s"int ksx_read_${name}_from_stream(ks_stream* stream, ksx_$name* data)")
       outSrc.puts("{")
@@ -98,52 +100,45 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrc.puts(s"return ksx_read_$name(stream, data, stream, data);")
       outSrc.dec
       outSrc.puts("}")
-      outHdrRoot.puts
-      outHdrRoot.puts(s"typedef struct ksx_${name}_")
-      outHdrRoot.puts("{")
-      outHdrRoot.inc
-      outHdrRoot.puts("ks_handle _handle;")
-      outHdrDefs.puts
-      outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
     } else {
       outHdrArrays.puts
-      outHdrArrays.puts(s"typedef struct ksx_array_${name}_")
+      outHdrArrays.puts(s"typedef struct ksx_array_${className}_")
       outHdrArrays.puts("{")
       outHdrArrays.inc
       outHdrArrays.puts("ks_handle _handle;")
       outHdrArrays.puts("int64_t size;")
-      outHdrArrays.puts(s"ksx_$name* data;")
+      outHdrArrays.puts(s"ksx_$className* data;")
       outHdrArrays.dec
-      outHdrArrays.puts(s"} ksx_array_$name;")
-      outHdr.puts
-      outHdr.puts(s"typedef struct ksx_${name}_")
-      outHdr.puts("{")
-      outHdr.inc
-      outHdr.puts("ks_handle _handle;")
-      outHdrDefs.puts(s"typedef struct ksx_array_${name}_ ksx_array_${name};")
-      outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_${name};")
+      outHdrArrays.puts(s"} ksx_array_$className;")
+      outHdrDefs.puts(s"typedef struct ksx_array_${className}_ ksx_array_${className};")
     }
+    outStruct.puts
+    outStruct.puts(s"typedef struct ksx_${className}_")
+    outStruct.puts("{")
+    outStruct.inc
+    outStruct.puts("ks_handle _handle;")
+    outHdrDefs.puts(s"typedef struct ksx_${className}_ ksx_${className};")
   }
 
-  override def classFooter(name: String): Unit = {
-	if (rootClassCounter == 1) {
-	  outHdrRoot.dec
-	  outHdrRoot.puts(s"} ksx_$name;")
-	} else {
-	  outHdr.dec
-	  outHdr.puts(s"} ksx_$name;")
-	}
-	rootClassCounter -= 1
+  override def classFooter(name: List[String]): Unit = {
+    val className = makeName(name)
+    val outStruct = outHdrStructs.last
+    outHdrStructs.remove(outHdrStructs.length -1)
+    outStruct.dec
+    outStruct.puts(s"} ksx_$className;")
+    outHdr.add(outStruct)
   }
 
   var currentClassName = ""
 
-  override def classConstructorHeader(name: String, parentType: DataType, rootClassName: String, isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
-    currentClassName = rootClassName
-	outSrcDefs.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data);");
-	outSrc.puts
-    outSrc.puts(s"static int ksx_read_${name}(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$name* data)")
-    outMethodBody.puts(s"    CHECK(ks_handle_init(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$name)));")
+  override def classConstructorHeader(name: List[String], parentType: DataType, rootClassName: List[String], isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
+    val className = makeName(name)
+    currentClassName = className
+    val rootName = makeName(rootClassName)
+    outSrcDefs.puts(s"static int ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, ks_stream* stream, ksx_$className* data);");
+    outSrc.puts
+    outSrc.puts(s"static int ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, ks_stream* stream, ksx_$className* data)")
+    outMethodBody.puts(s"    CHECK(ks_handle_init(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
   }
 
   override def classConstructorFooter: Unit = {}
@@ -188,6 +183,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
+    val outStruct = outHdrStructs.last
     if (idToStr(attrName) == "_parent" || idToStr(attrName) == "_root")
     {
       return
@@ -204,11 +200,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (isSubtypeByte) {
         return
     }
-	if (rootClassCounter == 1) {
-		outHdrRoot.puts(s"${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
-	} else {
-		outHdr.puts(s"${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
-	}
+    outStruct.puts(s"${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
     
   }
 
@@ -445,6 +437,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &$name));")
         outMethodBody.puts(s"data->$nameTarget = $name;")
       case t: UserTypeFromBytes =>
+        outMethodBody.puts("//" + assignType.toString())
         val typeName = makeName(t.name)
         outMethodBody.puts(s"CHECK(ks_stream_init_from_bytes(&_io_$name, &_raw_$name));")
         if (isArray) {
@@ -455,12 +448,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         }
       case t: UserTypeInstream =>
         val typeName = makeName(t.name)
+        outMethodBody.puts("//" + t.name.toString())
         outMethodBody.puts(s"/* Subtype */")
         if (isArray) {
-            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, &data->$nameTarget));")
+          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, &data->$nameTarget));")
         } else {
-            outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$nameTarget));")
+          outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
+          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$nameTarget));")
         }
     }
   }
@@ -598,7 +592,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attributeDeclaration(attrName, attrType, isNullable)
   }
 
-  def instanceStart(className: String): Unit = {
+  def instanceStart(classNameList: List[String]): Unit = {
+    val className = makeName(classNameList)
     outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$className* root_data, ks_stream* stream, ksx_$className* data);")
     outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$className* root_data, ks_stream* stream, ksx_$className* data)")
     outSrc.puts("{")
@@ -606,7 +601,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
   }
 
-  override def instanceHeader(className: String, instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {}
+  override def instanceHeader(className: List[String], instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {}
 
   override def instanceFooter: Unit = {
     outSrc.add(outMethodHead)
@@ -630,8 +625,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = $expr;")
   }
 
-  override def enumDeclaration(curClass: String, enumName: String, enumColl: Seq[(Long, String)]): Unit = {
-    val enumClass = type2class(enumName).toLowerCase()
+  override def enumDeclaration(curClass: List[String], enumName: String, enumColl: Seq[(Long, EnumValueSpec)]): Unit = {
+    val enumPath : ListBuffer[String] = ListBuffer()
+    enumPath.appendAll(curClass)
+    enumPath.append(enumName)
+    val enumClass = makeName(enumPath)
     val enumClass2 = "ksx_" + enumClass
 
     outHdrEnums.puts
@@ -640,7 +638,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrEnums.inc
 
     enumColl.foreach { case (id, label) =>
-      outHdrEnums.puts(s"${enumClass2.toUpperCase()}_${label.toUpperCase()} = $id,")
+      outHdrEnums.puts(s"${enumClass2.toUpperCase()}_${label.name.toUpperCase()} = $id,")
     }
 
     outHdrEnums.dec
@@ -701,6 +699,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     out.dec
     out.puts("}")
   }
+  override def type2class(className: String): String =
+    className
 }
 
 object CCompiler extends LanguageCompilerStatic

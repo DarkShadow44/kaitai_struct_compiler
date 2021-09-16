@@ -106,7 +106,7 @@ class CClassCompiler(
 
   override def compileInstances(curClass: ClassSpec) = {
     val lang2 = lang.asInstanceOf[CCompiler]
-    lang2.instanceStart(curClass.name.last)
+    lang2.instanceStart(curClass.name)
     val instances = getSortedInstances(curClass)
     for (name <- instances) {
       compileInstance(curClass.name, name, curClass.instances.get(name).get, curClass.meta.endian)
