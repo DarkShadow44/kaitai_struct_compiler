@@ -436,7 +436,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, $width, &$name));")
         outMethodBody.puts(s"data->$nameTarget = $name;")
       case t: UserTypeFromBytes =>
-        val typeName = lookupClass(t.name)
+        val typeName = makeName(t.classSpec.get.name)
         outMethodBody.puts(s"CHECK(ks_stream_init_from_bytes(&_io_$name, &_raw_$name));")
         if (isArray) {
           outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, &_io_$name, &data->$nameTarget));")
@@ -445,7 +445,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, &_io_$name, data->$nameTarget));")
         }
       case t: UserTypeInstream =>
-        val typeName = lookupClass(t.name)
+        val typeName = makeName(t.classSpec.get.name)
         outMethodBody.puts(s"/* Subtype */")
         if (isArray) {
           outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, &data->$nameTarget));")
@@ -710,54 +710,6 @@ object CCompiler extends LanguageCompilerStatic
     config: RuntimeConfig
   ): LanguageCompiler = new CCompiler(tp, config)
 
-  var currentClassSpec : ClassSpec = null
-  def setClassSpec(newClassSpec: ClassSpec) : Unit = {
-    currentClassSpec = newClassSpec
-  }
-
-  def tryGetSpecFromChildren(spec: ClassSpec, name: List[String]) : ClassSpec = {
-    val res = spec.types.map({case (k, v) => v}).find(x => x.name.last == name.head)
-    if (res.isEmpty) {
-      return null
-    }
-
-    if (name.length == 1) {
-      return res.get
-    }
-    tryGetSpecFromChildren(res.get, name.drop(1).toList)
-  }
-
-  def findClassSpec(classSpec: ClassSpec, name: List[String]) : ClassSpec = {
-    var spec = classSpec
-    while(spec != null) {
-      if (spec.name.last == name.head) {
-        if (name.length == 1) {
-          return spec
-        }
-        val child = tryGetSpecFromChildren(spec, name.drop(1))
-        if (child != null) {
-          return child
-        }
-      }
-      val child = tryGetSpecFromChildren(spec, name)
-      if (child != null) {
-        return child
-      }
-
-      if (spec.upClass.nonEmpty) {
-        spec = spec.upClass.get
-      } else {
-        spec = null
-      }
-    }
-    throw new Exception(s"Can't find class '${makeName(name)}'")
-  }
-
-  def lookupClass(nameList: List[String]): String = {
-    var spec = findClassSpec(currentClassSpec, nameList)
-    makeName(spec.name)
-  }
-
   def kaitaiType2NativeType(attrType: DataType): String = {
     attrType match {
       case Int1Type(false) => "uint8_t"
@@ -786,13 +738,13 @@ object CCompiler extends LanguageCompilerStatic
       case KaitaiStructType | CalcKaitaiStructType => kstructName
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
-      case t: UserType => "ksx_" + lookupClass(t.name)
-      case EnumType(name, _) => "ksx_" + lookupClass(name)
+      case t: UserType => "ksx_" + makeName(t.classSpec.get.name)
+      case EnumType(name, _) => "ksx_" + makeName(name)
 
       case at: ArrayType => {
         at.elType match {
-          case t: UserType => s"ksx_array_${lookupClass(t.name)}"
-          case EnumType(name, _) => s"ksx_array_${lookupClass(name)}"
+          case t: UserType => s"ksx_array_${makeName(t.classSpec.get.name)}"
+          case EnumType(name, _) => s"ksx_array_${makeName(name)}"
           case _ => s"ks_array_${kaitaiType2NativeType(at.elType)}"
         }
       }
