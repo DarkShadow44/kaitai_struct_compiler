@@ -98,11 +98,16 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"(${CCompiler.kstreamName}.ByteArrayCompare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
 
   override def arraySubscript(container: expr, idx: expr): String =
-    s"${translate(container)}[${translate(idx)}]"
+    s"${translate(container)}->data[${translate(idx)}]"
   override def doIfExp(condition: expr, ifTrue: expr, ifFalse: expr): String =
     s"(${translate(condition)} ? ${translate(ifTrue)} : ${translate(ifFalse)})"
-  override def doCast(value: Ast.expr, typeName: DataType): String =
-    s"((${CCompiler.kaitaiType2NativeType(typeName)}) (${translate(value)}))"
+  override def doCast(value: Ast.expr, typeName: DataType): String = {
+    val suffix = typeName match {
+      case t: UserType => "*"
+      case _ => ""
+    }
+    s"((${CCompiler.kaitaiType2NativeType(typeName)}$suffix) (${translate(value)}))"
+  }
 
   // Predefined methods of various types
   override def strToInt(s: expr, base: expr): String = {
@@ -134,7 +139,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   }
 
   override def arrayFirst(a: expr): String =
-    s"${translate(a)}[0]"
+    s"${translate(a)}->data[0]"
   override def arrayLast(a: expr): String = {
     val v = translate(a)
     s"$v[$v.Count - 1]"
@@ -148,7 +153,12 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"${translate(a)}.Max()"
   }
   override def anyField(value: expr, attrName: String): String = {
-      s"${translate(value)}->$attrName"
+    value match {
+      case expr.Subscript(_, _) =>
+        s"${translate(value)}.$attrName"
+      case _ =>
+        s"${translate(value)}->$attrName"
+    }
   }
   override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
   override def doBoolLiteral(n: Boolean): String = if (n) "1" else "0"
