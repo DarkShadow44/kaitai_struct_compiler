@@ -132,4 +132,8 @@ class CClassCompiler(
         lang.attrParse(pi, instName, endian)
     }
   }
+  override def compileClass(curClass: ClassSpec): Unit = {
+    CCompiler.setClassSpec(curClass)
+    super.compileClass(curClass)
+  }
 }
