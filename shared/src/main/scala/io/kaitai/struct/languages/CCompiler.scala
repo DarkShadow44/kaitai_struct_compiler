@@ -590,9 +590,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   def instanceStart(classNameList: List[String]): Unit = {
+    val rootClassName = classNameList.head.toLowerCase()
     val className = makeName(classNameList)
-    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$className* root_data, ks_stream* stream, ksx_$className* data);")
-    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$className* root_data, ks_stream* stream, ksx_$className* data)")
+    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data);")
+    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data)")
     outSrc.puts("{")
     outMethodHead.inc
     outMethodBody.inc
