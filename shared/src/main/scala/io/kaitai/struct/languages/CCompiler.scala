@@ -94,7 +94,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def opaqueClassDeclaration(classSpec: ClassSpec): Unit = {
-    importListHdr.addLocal(outFileNameHeader(classSpec.name.head))
+    // importListHdr.addLocal(outFileNameHeader(classSpec.name.head))
+  }
+
+ override def importFile(file: String): Unit = {
+    importListHdr.addLocal(outFileNameHeader(file.toLowerCase()))
   }
 
   override def classHeader(name: List[String]): Unit = {
