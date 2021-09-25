@@ -86,6 +86,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   //  outMethodBody.puts("}")
   }
 
+  override def opaqueClassDeclaration(classSpec: ClassSpec): Unit = {
+    importListHdr.addLocal(outFileNameHeader(classSpec.name.head))
+  }
+
   override def classHeader(name: List[String]): Unit = {
     val className = makeName(name)
     outHdrStructs.append(new StringLanguageOutputWriter(indent))
