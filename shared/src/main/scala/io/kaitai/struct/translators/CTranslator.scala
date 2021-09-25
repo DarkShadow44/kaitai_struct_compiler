@@ -37,6 +37,9 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   )
 
   override def doIntLiteral(n: BigInt): String = {
+    if (n == -9223372036854775808L) {
+      return s"(${n + 1}LL - 1)"
+    }
     val suffix = if (n < -9223372036854775808L) {
       "" // too low, no suffix would help anyway
     } else if (n <= -2147483649L) {
