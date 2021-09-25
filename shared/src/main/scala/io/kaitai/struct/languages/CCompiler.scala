@@ -36,6 +36,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrArrays = new StringLanguageOutputWriter(indent)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
+  val outHdrFinish = new StringLanguageOutputWriter(indent)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
@@ -44,7 +45,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val className = topClass.nameAsStr
     Map(
       outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrc.result),
-      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdr.result + outHdrArrays.result)
+      outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdr.result + outHdrArrays.result + outHdrFinish.result)
     )
   }
 
@@ -59,6 +60,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcHeader.puts
 
     outHdrHeader.puts(s"// $headerComment")
+    outHdrHeader.puts
+    outHdrHeader.puts(s"#ifndef KAITAI_${topClassName.toUpperCase()}_H")
+    outHdrHeader.puts(s"#define KAITAI_${topClassName.toUpperCase()}_H")
     outHdrHeader.puts
 
     importListSrc.addLocal(outFileNameHeader(topClassName))
@@ -79,6 +83,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outSrcDefs.puts
     outHdrDefs.puts
+
+    outHdrFinish.puts
+    outHdrFinish.puts("#endif")
   }
 
   override def fileFooter(topClassName: String): Unit = {
