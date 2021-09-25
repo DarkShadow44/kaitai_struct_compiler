@@ -750,12 +750,12 @@ object CCompiler extends LanguageCompilerStatic
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
       case t: UserType => "ksx_" + makeName(t.classSpec.get.name)
-      case EnumType(name, _) => "ksx_" + makeName(name)
+      case t: EnumType => "ksx_" + makeName(t.enumSpec.get.name)
 
       case at: ArrayType => {
         at.elType match {
           case t: UserType => s"ksx_array_${makeName(t.classSpec.get.name)}"
-          case EnumType(name, _) => s"ksx_array_${makeName(name)}"
+          case t: EnumType => s"ksx_array_${makeName(t.enumSpec.get.name)}"
           case _ => s"ks_array_${kaitaiType2NativeType(at.elType)}"
         }
       }
@@ -783,8 +783,8 @@ object CCompiler extends LanguageCompilerStatic
 
       case BitsType(_, _) => "KS_TYPE_ARRAY_INT, 8"
 
-      case t: UserType => s"KS_TYPE_ARRAY_USERTYPE, sizeof(ksx_${makeName(t.name)})"
-      case EnumType(name, _) => s"KS_TYPE_ARRAY_INT, sizeof(ksx_${makeName(name)})"
+      case t: UserType => s"KS_TYPE_ARRAY_USERTYPE, sizeof(ksx_${makeName(t.classSpec.get.name)})"
+      case t: EnumType => s"KS_TYPE_ARRAY_INT, sizeof(ksx_${makeName(t.enumSpec.get.name)})"
 
       case _ => "KS_TYPE_UNKNOWN, 0"
     }
