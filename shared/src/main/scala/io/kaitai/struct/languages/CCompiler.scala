@@ -651,7 +651,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrEnums.inc
 
     enumColl.foreach { case (id, label) =>
-      outHdrEnums.puts(s"${enumClass2.toUpperCase()}_${label.name.toUpperCase()} = $id,")
+      val value = translator.doIntLiteral(id)
+      outHdrEnums.puts(s"${enumClass2.toUpperCase()}_${label.name.toUpperCase()} = $value,")
     }
 
     outHdrEnums.dec
