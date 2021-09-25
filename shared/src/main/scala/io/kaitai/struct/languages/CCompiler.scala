@@ -98,7 +98,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
  override def importFile(file: String): Unit = {
-    importListHdr.addLocal(outFileNameHeader(file.toLowerCase()))
+    val name = file.toLowerCase()
+    importListHdr.addLocal(outFileNameHeader(name))
+    outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_$name;")
   }
 
   override def classHeader(name: List[String]): Unit = {
