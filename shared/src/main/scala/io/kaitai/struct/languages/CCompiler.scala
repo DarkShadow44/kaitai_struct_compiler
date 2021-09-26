@@ -217,6 +217,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (isSubtypeByte) {
         return
     }
+    if (isNullable) {
+      outStruct.puts(s"ks_bool ${nullFlagForName(attrName)};")
+    }
     outStruct.puts(s"${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
   }
 
@@ -301,6 +304,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"if (${expression(expr)}) {")
     outMethodBody.inc
   }
+
+  def nullFlagForName(ksName: Identifier) =
+    s"_is_valid_${idToStr(ksName)}"
+
+  override def condIfSetNull(instName: Identifier): Unit =
+    outMethodBody.puts(s"data->${nullFlagForName(instName)} = 0;")
+
+  override def condIfSetNonNull(instName: Identifier): Unit =
+    outMethodBody.puts(s"data->${nullFlagForName(instName)} = 1;")
 
   override def condIfFooter(expr: expr): Unit = {
     outMethodBody.dec
