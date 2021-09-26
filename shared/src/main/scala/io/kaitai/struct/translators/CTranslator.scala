@@ -1,7 +1,7 @@
 package io.kaitai.struct.translators
 
 import io.kaitai.struct.{ImportList, Utils}
-import io.kaitai.struct.datatype.DataType
+import io.kaitai.struct.datatype._
 import io.kaitai.struct.datatype.DataType._
 import io.kaitai.struct.exprlang.Ast
 import io.kaitai.struct.exprlang.Ast._
@@ -14,7 +14,19 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     val nativeType = CCompiler.kaitaiType2NativeType(t)
     val commaStr = value.map((v) => translate(v)).mkString(", ")
 
-    s"new List<$nativeType> { $commaStr }"
+    t match {
+      case CalcIntType => s"ks_array_int64_t_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
+      case CalcFloatType => s"ks_array_double_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
+      case CalcStrType => s"ks_array_string_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
+      case arr: CalcArrayType =>
+        arr.elType match {
+          case CalcIntType => s"ks_array_int64_t_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
+          case CalcFloatType => s"ks_array_double_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
+          case CalcStrType => s"ks_array_string_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
+          case _ => s"Missing list type: " + t.toString()
+        }
+      case _ => s"Missing list type: " + t.toString()
+    }
   }
 
   override def doByteArrayLiteral(arr: Seq[Byte]): String =
@@ -155,9 +167,8 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
    typeArray match {
       case t : ArrayType =>
         t.elType match {
-          case _ : Int1Type => s"ks_array_min_int(&$res->_handle)"
-          case _ : IntMultiType => s"ks_array_min_int(&$res->_handle)"
-          case _ : FloatMultiType => s"ks_array_min_float(&$res->_handle)"
+          case _ : IntType => s"ks_array_min_int(&$res->_handle)"
+          case _ : FloatType => s"ks_array_min_float(&$res->_handle)"
           case _ : StrType => s"ks_array_min_string(&$res->_handle)"
           case _ => "UNKNOWN_Min: " + t.toString()
         }
@@ -170,9 +181,8 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     typeArray match {
       case t : ArrayType =>
         t.elType match {
-          case _ : Int1Type => s"ks_array_max_int(&$res->_handle)"
-          case _ : IntMultiType => s"ks_array_max_int(&$res->_handle)"
-          case _ : FloatMultiType => s"ks_array_max_float(&$res->_handle)"
+          case _ : IntType => s"ks_array_max_int(&$res->_handle)"
+          case _ : FloatType => s"ks_array_max_float(&$res->_handle)"
           case _ : StrType => s"ks_array_max_string(&$res->_handle)"
           case _ => "UNKNOWN_Max: " + t.toString()
         }
