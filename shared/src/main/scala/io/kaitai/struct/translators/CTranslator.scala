@@ -124,7 +124,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"ks_string_from_int(${translate(i)}, ${translate(base)})"
   }
   override def bytesToStr(bytesExpr: String, encoding: Ast.expr): String =
-    s"System.Text.Encoding.GetEncoding(${translate(encoding)}).GetString($bytesExpr)"
+    s"ks_string_from_bytes($bytesExpr)"
   override def strLength(s: expr): String =
     s"${translate(s)}.Length"
 

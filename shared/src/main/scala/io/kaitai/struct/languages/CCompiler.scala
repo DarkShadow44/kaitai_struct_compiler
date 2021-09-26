@@ -360,7 +360,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentRepeatExpr(id: Identifier, expr: String): Unit = {
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, true)
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
   }
 
   override def condRepeatExprFooter: Unit = fileFooter(null)
@@ -392,7 +392,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name->size++;")
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, true)
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
     outMethodBody.puts(s"$nameTemp = data->$name->data[_pos_$name];");
   }
 
@@ -407,10 +407,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, false)
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, false)
   }
 
-  def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian], isArray: Boolean)
+  def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian], expr: String, isArray: Boolean)
   {
     // TODO: Use io!
     val name = privateMemberName(id)
@@ -443,7 +443,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case _: BytesEosType =>
         // s"$io.ReadBytesFull()"
       case BytesTerminatedType(terminator, include, consume, eosError, _) =>
-        // s"$io.ReadBytesTerm($terminator, $include, $consume, $eosError)"
+        val include2 = if (include) 1 else 0
+        val consume2 = if (consume) 1 else 0
+        val eosError2 = if (eosError) 1 else 0
+        outMethodHead.puts(s"ks_bytes _raw_$name;")
+        outMethodBody.puts(s"CHECK(ks_stream_read_bytes_term(stream, $terminator, $include2, $consume2, $eosError2, &_raw_$name));")
+        val expr2 = expr.replace("__EXPR__", s"&_raw_$name")
+        outMethodBody.puts(s"data->$nameTarget = $expr2;")
       case BitsType1(bitEndian) =>
         outMethodHead.puts(s"$targetType $name;")
         outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}(stream, 1, &$name));")
@@ -470,6 +476,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
           outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$nameTarget));")
         }
+      case _ =>
+        outMethodBody.puts("Missing expression type: " + dataType.toString())
     }
   }
 
@@ -496,7 +504,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     assignTypeLast = assignType;
     ioLast = io;
     defEndianLast = defEndian;
-    ""
+    "__EXPR__"
   }
 
   override def bytesPadTermExpr(expr0: String, padRight: Option[Int], terminator: Option[Int], include: Boolean) = {
