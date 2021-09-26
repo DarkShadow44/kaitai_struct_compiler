@@ -135,25 +135,49 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"${translate(s)}.Substring(${translate(from)}, ${translate(to)} - ${translate(from)})"
 
   override def bytesLength(b: Ast.expr): String =
-    s"${translate(b)}.Length"
+    s"${translate(b)}->size"
   override def bytesLast(b: Ast.expr): String = {
     val v = translate(b)
-    s"$v[$v.Length - 1]"
+    s"$v->data[$v->size - 1]"
   }
 
   override def arrayFirst(a: expr): String =
     s"${translate(a)}->data[0]"
   override def arrayLast(a: expr): String = {
     val v = translate(a)
-    s"$v[$v.Count - 1]"
+    s"$v->data[$v->size - 1]"
   }
   override def arraySize(a: expr): String =
-    s"${translate(a)}.Count"
+    s"${translate(a)}->size"
   override def arrayMin(a: Ast.expr): String = {
-    s"${translate(a)}.Min()"
+    var res = translate(a)
+    var typeArray = detectType(a)
+   typeArray match {
+      case t : ArrayType =>
+        t.elType match {
+          case _ : Int1Type => s"ks_array_min_int(&$res->_handle)"
+          case _ : IntMultiType => s"ks_array_min_int(&$res->_handle)"
+          case _ : FloatMultiType => s"ks_array_min_float(&$res->_handle)"
+          case _ : StrType => s"ks_array_min_string(&$res->_handle)"
+          case _ => "UNKNOWN_Min: " + t.toString()
+        }
+      case _ => "UNKNOWN_Min: " + typeArray.toString()
+    }
   }
   override def arrayMax(a: Ast.expr): String = {
-    s"${translate(a)}.Max()"
+    var res = translate(a)
+    var typeArray = detectType(a)
+    typeArray match {
+      case t : ArrayType =>
+        t.elType match {
+          case _ : Int1Type => s"ks_array_max_int(&$res->_handle)"
+          case _ : IntMultiType => s"ks_array_max_int(&$res->_handle)"
+          case _ : FloatMultiType => s"ks_array_max_float(&$res->_handle)"
+          case _ : StrType => s"ks_array_max_string(&$res->_handle)"
+          case _ => "UNKNOWN_Max: " + t.toString()
+        }
+      case _ => "UNKNOWN_Max: " + typeArray.toString()
+    }
   }
   override def anyField(value: expr, attrName: String): String = {
     value match {

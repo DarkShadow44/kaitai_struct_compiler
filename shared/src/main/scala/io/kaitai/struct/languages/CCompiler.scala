@@ -89,8 +89,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def fileFooter(topClassName: String): Unit = {
-   // outMethodBody.dec
-  //  outMethodBody.puts("}")
+    outMethodBody.dec
+    outMethodBody.puts("}")
   }
 
   override def opaqueClassDeclaration(classSpec: ClassSpec): Unit = {
@@ -763,6 +763,7 @@ object CCompiler extends LanguageCompilerStatic
         at.elType match {
           case t: UserType => s"ksx_array_${makeName(t.classSpec.get.name)}"
           case t: EnumType => s"ksx_array_${makeName(t.enumSpec.get.name)}"
+          case _: StrType => s"ks_array_string"
           case _ => s"ks_array_${kaitaiType2NativeType(at.elType)}"
         }
       }
@@ -773,10 +774,10 @@ object CCompiler extends LanguageCompilerStatic
 
   def getKaitaiTypeEnumAndSize(attrType: DataType): String = {
     attrType match {
-      case Int1Type(false) => "KS_TYPE_ARRAY_INT, 1"
-      case IntMultiType(false, Width2, _) => "KS_TYPE_ARRAY_INT, 2"
-      case IntMultiType(false, Width4, _) => "KS_TYPE_ARRAY_INT, 4"
-      case IntMultiType(false, Width8, _) => "KS_TYPE_ARRAY_INT, 8"
+      case Int1Type(false) => "KS_TYPE_ARRAY_UINT, 1"
+      case IntMultiType(false, Width2, _) => "KS_TYPE_ARRAY_UINT, 2"
+      case IntMultiType(false, Width4, _) => "KS_TYPE_ARRAY_UINT, 4"
+      case IntMultiType(false, Width8, _) => "KS_TYPE_ARRAY_UINT, 8"
 
       case Int1Type(true) => "KS_TYPE_ARRAY_INT, 1"
       case IntMultiType(true, Width2, _) => "KS_TYPE_ARRAY_INT, 2"
@@ -786,12 +787,12 @@ object CCompiler extends LanguageCompilerStatic
       case FloatMultiType(Width4, _) => "KS_TYPE_ARRAY_FLOAT, 4"
       case FloatMultiType(Width8, _) => "KS_TYPE_ARRAY_FLOAT, 8"
 
-      case _: StrType => "KS_TYPE_ARRAY_STRING, 0"
+      case _: StrType => "KS_TYPE_ARRAY_STRING, sizeof(ks_string)"
 
-      case BitsType(_, _) => "KS_TYPE_ARRAY_INT, 8"
+      case BitsType(_, _) => "KS_TYPE_ARRAY_UINT, 8"
 
       case t: UserType => s"KS_TYPE_ARRAY_USERTYPE, sizeof(ksx_${makeName(t.classSpec.get.name)})"
-      case t: EnumType => s"KS_TYPE_ARRAY_INT, sizeof(ksx_${makeName(t.enumSpec.get.name)})"
+      case t: EnumType => getKaitaiTypeEnumAndSize(t.basedOn)
 
       case _ => "KS_TYPE_UNKNOWN, 0"
     }
