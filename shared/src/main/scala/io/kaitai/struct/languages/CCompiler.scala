@@ -191,7 +191,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (outMethodHead.result != "") {
         outSrc.puts
     }
-    outMethodBody.puts(s"ksx_read_${currentClassName}_instances(root_stream, root_data, stream, data);")
+    outMethodBody.puts(s"CHECK(ksx_read_${currentClassName}_instances(root_stream, root_data, stream, data));")
     outSrc.add(outMethodBody)
     outSrc.puts
     outSrc.puts("}")
@@ -284,14 +284,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     "io"
   }
 
-  override def pushPos(io: String): Unit =
-    outMethodBody.puts(s"long _pos = $io.Pos;")
+  override def pushPos(io: String): Unit = {
+    // outMethodBody.puts(s"long _pos = $io.Pos;")
+  }
 
   override def seek(io: String, pos: Ast.expr): Unit =
-    outMethodBody.puts(s"$io.Seek(${expression(pos)});")
+    outMethodBody.puts(s"CHECK(ks_stream_seek(stream, ${expression(pos)}));")
 
-  override def popPos(io: String): Unit =
-    outMethodBody.puts(s"$io.Seek(_pos);")
+  override def popPos(io: String): Unit = {
+    // outMethodBody.puts(s"$io.Seek(_pos);")
+  }
 
   override def alignToByte(io: String): Unit =
     outMethodBody.puts(s"$io.AlignToByte();")
@@ -624,8 +626,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   def instanceStart(classNameList: List[String]): Unit = {
     val rootClassName = classNameList.head.toLowerCase()
     val className = makeName(classNameList)
-    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data);")
-    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data)")
+    outSrcDefs.puts(s"static int ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data);")
+    outSrc.puts(s"static int ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data)")
     outSrc.puts("{")
     outMethodHead.inc
     outMethodBody.inc
@@ -639,6 +641,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outSrc.puts
     }
     outSrc.add(outMethodBody)
+    outSrc.puts
+    outSrc.puts("return 0;")
     outSrc.puts("}")
     outMethodHead = new StringLanguageOutputWriter(indent)
     outMethodBody = new StringLanguageOutputWriter(indent)
