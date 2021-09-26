@@ -163,21 +163,21 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def runRead(name: List[String]): Unit = {}
 
   override def runReadCalc(): Unit = {
-    out.puts
-    out.puts(s"if (${privateMemberName(EndianIdentifier)} == null) {")
-    out.inc
-    out.puts(s"throw new ${ksErrorName(UndecidedEndiannessError)}();")
+    outMethodBody.puts
+    outMethodBody.puts(s"if (${privateMemberName(EndianIdentifier)} == null) {")
+    outMethodBody.inc
+    outMethodBody.puts(s"throw new ${ksErrorName(UndecidedEndiannessError)}();")
     importList.add("System")
     out.dec
-    out.puts(s"} else if (${privateMemberName(EndianIdentifier)} == true) {")
-    out.inc
-    out.puts("_readLE();")
+    outMethodBody.puts(s"} else if (${privateMemberName(EndianIdentifier)} == true) {")
+    outMethodBody.inc
+    outMethodBody.puts("_readLE();")
     out.dec
-    out.puts("} else {")
-    out.inc
-    out.puts("_readBE();")
+    outMethodBody.puts("} else {")
+    outMethodBody.inc
+    outMethodBody.puts("_readBE();")
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
   }
 
   override def readHeader(endian: Option[FixedEndian], isEmpty: Boolean) = {
@@ -225,19 +225,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def universalDoc(doc: DocSpec): Unit = {}
 
   override def attrParseHybrid(leProc: () => Unit, beProc: () => Unit): Unit = {
-    out.puts(s"if (${privateMemberName(EndianIdentifier)} == true) {")
-    out.inc
+    outMethodBody.puts(s"if (${privateMemberName(EndianIdentifier)} == true) {")
+    outMethodBody.inc
     leProc()
-    out.dec
-    out.puts("} else {")
-    out.inc
+    outMethodBody.dec
+    outMethodBody.puts("} else {")
+    outMethodBody.inc
     beProc()
-    out.dec
-    out.puts("}")
+    outMethodBody.dec
+    outMethodBody.puts("}")
   }
 
   override def attrFixedContentsParse(attrName: Identifier, contents: String): Unit =
-    out.puts(s"${privateMemberName(attrName)} = $normalIO.EnsureFixedContents($contents);")
+    outMethodBody.puts(s"${privateMemberName(attrName)} = $normalIO.EnsureFixedContents($contents);")
 
   override def attrProcess(proc: ProcessExpr, varSrc: Identifier, varDest: Identifier, rep: RepeatSpec): Unit = {
     val srcExpr = getRawIdExpr(varSrc, rep)
@@ -257,24 +257,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case ProcessCustom(name, args) =>
         val procClass = types2class(name)
         val procName = s"_process_${idToStr(varSrc)}"
-        out.puts(s"$procClass $procName = new $procClass(${args.map(expression).mkString(", ")});")
+        outMethodBody.puts(s"$procClass $procName = new $procClass(${args.map(expression).mkString(", ")});")
         s"$procName.Decode($srcExpr)"
     }
     handleAssignment(varDest, expr, rep, false)
   }
 
   override def allocateIO(varName: Identifier, rep: RepeatSpec): String = {
-    val privateVarName = privateMemberName(varName)
-
-    val ioName = s"io_$privateVarName"
-
-    val args = rep match {
-      case RepeatUntil(_) => translator.doName(Identifier.ITERATOR2)
-      case _ => getRawIdExpr(varName, rep)
-    }
-
-    out.puts(s"var $ioName = new $kstreamName($args);")
-    ioName
+    // We handle stuff differently already
+    ""
   }
 
   def getRawIdExpr(varName: Identifier, rep: RepeatSpec): String = {
@@ -286,59 +277,62 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def useIO(ioEx: expr): String = {
-    out.puts(s"$kstreamName io = ${expression(ioEx)};")
+    outMethodBody.puts(s"$kstreamName io = ${expression(ioEx)};")
     "io"
   }
 
   override def pushPos(io: String): Unit =
-    out.puts(s"long _pos = $io.Pos;")
+    outMethodBody.puts(s"long _pos = $io.Pos;")
 
   override def seek(io: String, pos: Ast.expr): Unit =
-    out.puts(s"$io.Seek(${expression(pos)});")
+    outMethodBody.puts(s"$io.Seek(${expression(pos)});")
 
   override def popPos(io: String): Unit =
-    out.puts(s"$io.Seek(_pos);")
+    outMethodBody.puts(s"$io.Seek(_pos);")
 
   override def alignToByte(io: String): Unit =
-    out.puts(s"$io.AlignToByte();")
+    outMethodBody.puts(s"$io.AlignToByte();")
 
   override def instanceClear(instName: InstanceIdentifier): Unit = {}
 
   override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {}
 
   override def condIfHeader(expr: expr): Unit = {
-    out.puts(s"if (${expression(expr)}) {")
-    out.inc
+    outMethodBody.puts(s"if (${expression(expr)}) {")
+    outMethodBody.inc
   }
 
-  override def condIfFooter(expr: expr): Unit = fileFooter(null)
+  override def condIfFooter(expr: expr): Unit = {
+    outMethodBody.dec
+    outMethodBody.puts("}")
+  }
 
   override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw): Unit = {
     importList.add("System.Collections.Generic")
 
     if (needRaw.level >= 1)
-      out.puts(s"${privateMemberName(RawIdentifier(id))} = new List<byte[]>();")
+      outMethodBody.puts(s"${privateMemberName(RawIdentifier(id))} = new List<byte[]>();")
     if (needRaw.level >= 2)
-      out.puts(s"${privateMemberName(RawIdentifier(RawIdentifier(id)))} = new List<byte[]>();")
+      outMethodBody.puts(s"${privateMemberName(RawIdentifier(RawIdentifier(id)))} = new List<byte[]>();")
 
-    out.puts(s"${privateMemberName(id)} = new ${kaitaiType2NativeType(ArrayTypeInStream(dataType))}();")
-    out.puts("{")
-    out.inc
-    out.puts("var i = 0;")
-    out.puts(s"while (!$io.IsEof) {")
-    out.inc
+    outMethodBody.puts(s"${privateMemberName(id)} = new ${kaitaiType2NativeType(ArrayTypeInStream(dataType))}();")
+    outMethodBody.puts("{")
+    outMethodBody.inc
+    outMethodBody.puts("var i = 0;")
+    outMethodBody.puts(s"while (!$io.IsEof) {")
+    outMethodBody.inc
   }
 
   override def handleAssignmentRepeatEos(id: Identifier, expr: String): Unit = {
-    out.puts(s"${privateMemberName(id)}.Add($expr);")
+    outMethodBody.puts(s"${privateMemberName(id)}.Add($expr);")
   }
 
   override def condRepeatEosFooter: Unit = {
-    out.puts("i++;")
+    outMethodBody.puts("i++;")
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
   }
 
   override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, repeatExpr: expr): Unit = {
@@ -363,7 +357,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
   }
 
-  override def condRepeatExprFooter: Unit = fileFooter(null)
+  override def condRepeatExprFooter: Unit = {
+  }
 
   override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
     val pos = "_pos_" + privateMemberName(id)
@@ -482,15 +477,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit =
-    out.puts(s"${kaitaiType2NativeType(dataType)} $id = $expr;")
+    outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} $id = $expr;")
 
   override def blockScopeHeader: Unit = {
-    out.puts("{")
-    out.inc
+    outMethodBody.puts("{")
+    outMethodBody.inc
   }
   override def blockScopeFooter: Unit = {
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
   }
 
   var dataTypeLast: DataType = null;
@@ -525,7 +520,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     } else {
       id
     }
-    out.puts(s"$expr._read();")
+    outMethodBody.puts(s"$expr._read();")
   }
 
   override def switchRequiresIfs(onType: DataType): Boolean = onType match {
@@ -538,37 +533,37 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val NAME_SWITCH_ON = Ast.expr.Name(Ast.identifier(Identifier.SWITCH_ON))
 
   override def switchStart(id: Identifier, on: Ast.expr): Unit =
-    out.puts(s"switch (${expression(on)}) {")
+    outMethodBody.puts(s"switch (${expression(on)}) {")
 
   override def switchCaseFirstStart(condition: Ast.expr): Unit = switchCaseStart(condition)
 
   override def switchCaseStart(condition: Ast.expr): Unit = {
-    out.puts(s"case ${expression(condition)}: {")
-    out.inc
+    outMethodBody.puts(s"case ${expression(condition)}: {")
+    outMethodBody.inc
   }
 
   override def switchCaseEnd(): Unit = {
-    out.puts("break;")
+    outMethodBody.puts("break;")
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
   }
 
   override def switchElseStart(): Unit = {
-    out.puts("default: {")
-    out.inc
+    outMethodBody.puts("default: {")
+    outMethodBody.inc
   }
 
   override def switchEnd(): Unit =
-    out.puts("}")
+    outMethodBody.puts("}")
 
   //</editor-fold>
 
   //<editor-fold desc="switching: emulation with ifs">
 
   override def switchIfStart(id: Identifier, on: Ast.expr, onType: DataType): Unit = {
-    out.puts("{")
-    out.inc
-    out.puts(s"${kaitaiType2NativeType(onType)} ${expression(NAME_SWITCH_ON)} = ${expression(on)};")
+    outMethodBody.puts("{")
+    outMethodBody.inc
+    outMethodBody.puts(s"${kaitaiType2NativeType(onType)} ${expression(NAME_SWITCH_ON)} = ${expression(on)};")
   }
 
   def switchCmpExpr(condition: Ast.expr): String =
@@ -581,31 +576,31 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     )
 
   override def switchIfCaseFirstStart(condition: Ast.expr): Unit = {
-    out.puts(s"if (${switchCmpExpr(condition)})")
-    out.puts("{")
-    out.inc
+    outMethodBody.puts(s"if (${switchCmpExpr(condition)})")
+    outMethodBody.puts("{")
+    outMethodBody.inc
   }
 
   override def switchIfCaseStart(condition: Ast.expr): Unit = {
-    out.puts(s"else if (${switchCmpExpr(condition)})")
-    out.puts("{")
-    out.inc
+    outMethodBody.puts(s"else if (${switchCmpExpr(condition)})")
+    outMethodBody.puts("{")
+    outMethodBody.inc
   }
 
   override def switchIfCaseEnd(): Unit = {
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
   }
 
   override def switchIfElseStart(): Unit = {
-    out.puts("else")
-    out.puts("{")
-    out.inc
+    outMethodBody.puts("else")
+    outMethodBody.puts("{")
+    outMethodBody.inc
   }
 
   override def switchIfEnd(): Unit = {
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
   }
 
   //</editor-fold>
@@ -722,12 +717,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     errArgs: List[Ast.expr]
   ): Unit = {
     val errArgsStr = errArgs.map(translator.translate).mkString(", ")
-    out.puts(s"if (!(${translator.translate(checkExpr)}))")
-    out.puts("{")
-    out.inc
-    out.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
+    outMethodBody.puts(s"if (!(${translator.translate(checkExpr)}))")
+    outMethodBody.puts("{")
+    outMethodBody.inc
+    outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
     out.dec
-    out.puts("}")
+    outMethodBody.puts("}")
   }
   override def type2class(className: String): String =
     className
