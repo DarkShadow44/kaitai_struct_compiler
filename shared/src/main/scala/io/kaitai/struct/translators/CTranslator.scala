@@ -87,6 +87,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
       s match {
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
+        case Identifier.IO => "stream"
         case _ => s"_temp$s"
       }
     } else {
@@ -199,4 +200,6 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   }
   override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
   override def doBoolLiteral(n: Boolean): String = if (n) "1" else "0"
+  override def kaitaiStreamEof(value: Ast.expr): String =
+    s"ks_stream_is_eof(${translate(value)})"
 }
