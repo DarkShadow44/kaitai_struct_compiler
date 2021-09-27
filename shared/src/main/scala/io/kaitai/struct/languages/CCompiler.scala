@@ -38,6 +38,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
   val outHdrFinish = new StringLanguageOutputWriter(indent)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
+  val importedTypes : ListBuffer[String] = ListBuffer()
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
 
@@ -98,7 +99,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
  override def importFile(file: String): Unit = {
-    val name = file.toLowerCase()
+    val name = file.toLowerCase().split("/").last
+    importedTypes.append(name)
     importListHdr.addLocal(outFileNameHeader(name))
     outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_$name;")
   }
@@ -483,7 +485,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$nameTarget));")
+          if (importedTypes.contains(typeName)) {
+            outMethodBody.puts(s"CHECK(ksx_read_${typeName}_from_stream(stream, data->$nameTarget));")
+          } else {
+            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, stream, data->$nameTarget));")
+          }
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
@@ -642,7 +648,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
     outSrc.add(outMethodBody)
     outSrc.puts
-    outSrc.puts("return 0;")
+    outSrc.puts("    return 0;")
     outSrc.puts("}")
     outMethodHead = new StringLanguageOutputWriter(indent)
     outMethodBody = new StringLanguageOutputWriter(indent)
