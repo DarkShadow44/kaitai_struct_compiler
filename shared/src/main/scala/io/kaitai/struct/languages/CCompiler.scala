@@ -373,8 +373,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
   }
 
-  override def condRepeatExprFooter: Unit = {
-  }
+  override def condRepeatExprFooter: Unit = fileFooter(null)
 
   override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
     val pos = "_pos_" + privateMemberName(id)
@@ -449,7 +448,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             outMethodBody.puts(s"/* Subtype with substream */")
             outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &_raw_$name));")
           case _ =>
-            outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &data->$name));")
+            outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &data->$nameTarget));")
         }
       case _: BytesEosType =>
         // s"$io.ReadBytesFull()"
@@ -795,6 +794,7 @@ object CCompiler extends LanguageCompilerStatic
           case t: UserType => s"ksx_array_${makeName(t.classSpec.get.name)}"
           case t: EnumType => s"ksx_array_${makeName(t.enumSpec.get.name)}"
           case _: StrType => s"ks_array_string"
+          case _: BytesType => s"ks_array_bytes"
           case _ => s"ks_array_${kaitaiType2NativeType(at.elType)}"
         }
       }
@@ -821,6 +821,7 @@ object CCompiler extends LanguageCompilerStatic
       case _: StrType => "KS_TYPE_ARRAY_STRING, sizeof(ks_string)"
 
       case BitsType(_, _) => "KS_TYPE_ARRAY_UINT, 8"
+      case _: BytesType => s"KS_TYPE_ARRAY_BYTES, sizeof(ks_bytes)"
 
       case t: UserType => s"KS_TYPE_ARRAY_USERTYPE, sizeof(ksx_${makeName(t.classSpec.get.name)})"
       case t: EnumType => getKaitaiTypeEnumAndSize(t.basedOn)
