@@ -441,14 +441,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECK(ks_stream_read_${t.apiCall(defEndian)}(stream, &$name));")
         outMethodBody.puts(s"data->$nameTarget = $name;")
       case blt: BytesLimitType =>
+        outMethodHead.puts(s"ks_bytes _raw_$name;")
         id match {
           case RawIdentifier(_) =>
-            outMethodHead.puts(s"ks_bytes _raw_$name;")
             outMethodHead.puts(s"ks_stream _io_$name;")
             outMethodBody.puts(s"/* Subtype with substream */")
             outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &_raw_$name));")
           case _ =>
-            outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &data->$nameTarget));")
+            outMethodBody.puts(s"CHECK(ks_stream_read_bytes(stream, ${expression(blt.size)}, &_raw_$name));")
+            val expr2 = expr.replace("__EXPR__", s"&_raw_$name")
+            outMethodBody.puts(s"data->$nameTarget = $expr2;")
         }
       case _: BytesEosType =>
         // s"$io.ReadBytesFull()"
