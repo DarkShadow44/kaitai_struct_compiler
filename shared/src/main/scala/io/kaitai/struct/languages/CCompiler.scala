@@ -214,6 +214,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val suffix = attrType match {
       case t: UserType => "*"
       case at: ArrayType => "*"
+      case sw: SwitchType =>
+        sw.combinedType match {
+          case t: UserType => "*"
+          case _ => ""
+        }
       case _ => ""
     }
     val isSubtypeByte = attrName match {
@@ -436,7 +441,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         lastWasInstanceValue = false
         return
     }
-    val io_new = if (io == "_io") "stream" else io
+    val io_new = if (io == "_io") "stream" else s"&$io"
     // outMethodBody.puts("//" + io + " -> " + dataType.toString() + " __ " + assignType.toString())
     val targetType = kaitaiType2NativeType(dataType)
 
@@ -494,7 +499,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           if (importedTypes.contains(typeName)) {
             outMethodBody.puts(s"CHECK(ksx_read_${typeName}_from_stream($io_new, data->$nameTarget));")
           } else {
-            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, $io_new, data, data->$nameTarget));")
+            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, data, $io_new, data->$nameTarget));")
           }
         }
       case _ =>
