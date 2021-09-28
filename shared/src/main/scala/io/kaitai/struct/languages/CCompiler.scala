@@ -461,7 +461,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             outMethodBody.puts(s"CHECK(ks_stream_read_bytes($io_new, ${expression(blt.size)}, &_raw_$name));")
           case _ =>
             outMethodBody.puts(s"CHECK(ks_stream_read_bytes($io_new, ${expression(blt.size)}, &_raw_$name));")
-            val expr2 = expr.replace("__EXPR__", s"&_raw_$name")
+            val expr2 = expr.replace("__EXPR__", s"_raw_$name")
             outMethodBody.puts(s"data->$nameTarget = $expr2;")
         }
       case _: BytesEosType =>
