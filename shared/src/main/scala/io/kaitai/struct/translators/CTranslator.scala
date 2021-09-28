@@ -100,16 +100,6 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   }
   override def doEnumById(enumTypeAbs: List[String], id: String): String = id
 
-  override def doStrCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr) = {
-    if (op == Ast.cmpop.Eq) {
-      s"${translate(left)} == ${translate(right)}"
-    } else if (op == Ast.cmpop.NotEq) {
-      s"${translate(left)} != ${translate(right)}"
-    } else {
-      s"(${translate(left)}.CompareTo(${translate(right)}) ${cmpOp(op)} 0)"
-    }
-  }
-
   override def doBytesCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr): String =
     s"(${CCompiler.kstreamName}.ByteArrayCompare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
 
@@ -138,6 +128,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   }
   override def bytesToStr(bytesExpr: String, encoding: Ast.expr): String =
     s"ks_string_from_bytes($bytesExpr)"
+
   override def strLength(s: expr): String =
     s"${translate(s)}.Length"
 
@@ -147,8 +138,12 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def strSubstring(s: expr, from: expr, to: expr): String =
     s"${translate(s)}.Substring(${translate(from)}, ${translate(to)} - ${translate(from)})"
 
+  override def doStrCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr): String =
+    s"(strcmp(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
+
   override def bytesLength(b: Ast.expr): String =
     s"${translate(b)}->size"
+
   override def bytesLast(b: Ast.expr): String = {
     val v = translate(b)
     s"$v->data[$v->size - 1]"
