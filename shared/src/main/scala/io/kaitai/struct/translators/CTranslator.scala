@@ -30,7 +30,11 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   }
 
   override def doByteArrayLiteral(arr: Seq[Byte]): String =
-    s"ks_bytes_from_data(${arr.size}, ${arr.map(_ & 0xff).mkString(", ")})"
+    if (arr.size == 0) {
+      s"ks_bytes_from_data(0)"
+    } else {
+      s"ks_bytes_from_data(${arr.size}, ${arr.map(_ & 0xff).mkString(", ")})"
+    }
   override def doByteArrayNonLiteral(elts: Seq[Ast.expr]): String =
     s"new byte[] { ${elts.map(translate).mkString(", ")} }"
 
@@ -112,9 +116,16 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def doCast(value: Ast.expr, typeName: DataType): String = {
     val suffix = typeName match {
       case t: UserType => "*"
+      case t: StrType => "*"
+      case t : BytesType => "*"
       case _ => ""
     }
-    s"((${CCompiler.kaitaiType2NativeType(typeName)}$suffix) (${translate(value)}))"
+    val deref = typeName match {
+      case t: StrType => "*"
+      case t : BytesType => "*"
+      case _ => ""
+    }
+    s"($deref(${CCompiler.kaitaiType2NativeType(typeName)}$suffix) (${translate(value)}))"
   }
 
   // Predefined methods of various types
@@ -132,7 +143,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"ks_string_from_bytes($bytesExpr)"
 
   override def strLength(s: expr): String =
-    s"${translate(s)}.Length"
+    s"${translate(s)}.len"
 
   override def strReverse(s: expr): String =
     s"${CCompiler.kstreamName}.StringReverse(${translate(s)})"

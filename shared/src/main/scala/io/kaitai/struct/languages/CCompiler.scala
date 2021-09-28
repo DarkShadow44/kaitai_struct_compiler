@@ -215,10 +215,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case t: UserType => "*"
       case at: ArrayType => "*"
       case KaitaiStructType | CalcKaitaiStructType => "*"
+      case AnyType => "*"
       case sw: SwitchType =>
         sw.combinedType match {
           case t: UserType => "*"
           case KaitaiStructType | CalcKaitaiStructType => "*"
+          case AnyType => "*"
           case _ => ""
         }
       case _ => ""
@@ -799,7 +801,7 @@ object CCompiler extends LanguageCompilerStatic
       case _: StrType => "ks_string"
       case _: BytesType => "ks_bytes"
 
-      case AnyType => "void*"
+      case AnyType => "void"
       case KaitaiStructType | CalcKaitaiStructType => kstructName
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
