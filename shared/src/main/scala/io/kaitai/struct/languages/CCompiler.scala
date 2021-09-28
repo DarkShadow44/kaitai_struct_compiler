@@ -308,8 +308,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     // outMethodBody.puts(s"$io.Seek(_pos);")
   }
 
-  override def alignToByte(io: String): Unit =
-    outMethodBody.puts(s"$io.AlignToByte();")
+  override def alignToByte(io: String): Unit = {
+    val io_new = if (io == "_io") "stream" else s"&$io"
+    outMethodBody.puts(s"CHECK(ks_stream_align_to_byte($io_new));")
+  }
 
   override def instanceClear(instName: InstanceIdentifier): Unit = {}
 
