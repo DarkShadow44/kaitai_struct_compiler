@@ -214,9 +214,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val suffix = attrType match {
       case t: UserType => "*"
       case at: ArrayType => "*"
+      case KaitaiStructType | CalcKaitaiStructType => "*"
       case sw: SwitchType =>
         sw.combinedType match {
           case t: UserType => "*"
+          case KaitaiStructType | CalcKaitaiStructType => "*"
           case _ => ""
         }
       case _ => ""
