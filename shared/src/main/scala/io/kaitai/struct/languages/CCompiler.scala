@@ -170,15 +170,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
     outMethodBody.puts(s"throw new ${ksErrorName(UndecidedEndiannessError)}();")
     importList.add("System")
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts(s"} else if (${privateMemberName(EndianIdentifier)} == true) {")
     outMethodBody.inc
     outMethodBody.puts("_readLE();")
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("} else {")
     outMethodBody.inc
     outMethodBody.puts("_readBE();")
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
   }
 
@@ -345,9 +345,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def condRepeatEosFooter: Unit = {
     outMethodBody.puts("i++;")
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
   }
 
@@ -503,7 +503,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
   }
   override def blockScopeFooter: Unit = {
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
   }
 
@@ -563,7 +563,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def switchCaseEnd(): Unit = {
     outMethodBody.puts("break;")
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
   }
 
@@ -607,7 +607,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def switchIfCaseEnd(): Unit = {
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
   }
 
@@ -618,7 +618,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def switchIfEnd(): Unit = {
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
   }
 
@@ -742,7 +742,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
-    out.dec
+    outMethodBody.dec
     outMethodBody.puts("}")
   }
   override def type2class(className: String): String =
