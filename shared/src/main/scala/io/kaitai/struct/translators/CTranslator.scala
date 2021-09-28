@@ -152,11 +152,11 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   }
 
   override def bytesLength(b: Ast.expr): String =
-    s"${translate(b)}->size"
+    s"${translate(b)}.length"
 
   override def bytesLast(b: Ast.expr): String = {
     val v = translate(b)
-    s"$v->data[$v->size - 1]"
+    s"$v.data[$v.length - 1]"
   }
 
   override def arrayFirst(a: expr): String =
