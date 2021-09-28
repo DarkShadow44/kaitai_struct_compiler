@@ -543,7 +543,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def switchRequiresIfs(onType: DataType): Boolean = onType match {
-    case _: IntType | _: EnumType | _: StrType => false
+    case _: IntType | _: EnumType => false
     case _ => true
   }
 
