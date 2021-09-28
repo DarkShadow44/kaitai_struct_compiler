@@ -477,11 +477,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val expr2 = expr.replace("__EXPR__", s"&_raw_$name")
         outMethodBody.puts(s"data->$nameTarget = $expr2;")
       case BitsType1(bitEndian) =>
-        outMethodHead.puts(s"$targetType $name;")
+        outMethodHead.puts(s"uint64_t $name;")
         outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, 1, &$name));")
         outMethodBody.puts(s"data->$nameTarget = $name;")
       case BitsType(width: Int, bitEndian) =>
-        outMethodHead.puts(s"$targetType $name;")
+        outMethodHead.puts(s"uint64_t $name;")
         outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width, &$name));")
         outMethodBody.puts(s"data->$nameTarget = $name;")
       case t: UserTypeFromBytes =>
