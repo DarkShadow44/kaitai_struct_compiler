@@ -80,7 +80,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def numericBinOp(left: Ast.expr, op: Ast.operator, right: Ast.expr) = {
     (detectType(left), detectType(right), op) match {
       case (_: IntType, _: IntType, Ast.operator.Mod) =>
-        s"${CCompiler.kstreamName}.Mod(${translate(left)}, ${translate(right)})"
+        s"ks_mod(${translate(left)}, ${translate(right)})"
       case _ =>
         super.numericBinOp(left, op, right)
     }
