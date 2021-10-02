@@ -162,6 +162,10 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     }
   }
 
+  override def doStringLiteral(s: String): String = {
+    s"ks_string_from_cstr(${super.doStringLiteral(s)})"
+  }
+
   override def bytesLength(b: Ast.expr): String =
     s"${translate(b)}.length"
 
