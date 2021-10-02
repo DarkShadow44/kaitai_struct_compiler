@@ -340,27 +340,33 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw): Unit = {
-    importList.add("System.Collections.Generic")
-
-    if (needRaw.level >= 1)
-      outMethodBody.puts(s"${privateMemberName(RawIdentifier(id))} = new List<byte[]>();")
-    if (needRaw.level >= 2)
-      outMethodBody.puts(s"${privateMemberName(RawIdentifier(RawIdentifier(id)))} = new List<byte[]>();")
-
-    outMethodBody.puts(s"${privateMemberName(id)} = new ${kaitaiType2NativeType(ArrayTypeInStream(dataType))}();")
+    val name = privateMemberName(RawIdentifier(id))
+    val pos = "_pos_" + privateMemberName(id)
+    val dataTypeArray = ArrayTypeInStream(dataType)
+    val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    val io_new = if (io == "_io") "stream" else s"&$io"
+    outMethodBody.puts("/* Array (repeat-eos) */")
+    outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
+    outMethodBody.puts(s"data->$name->size = 0;")
+    outMethodBody.puts(s"data->$name->data = 0;")
+    outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
-    outMethodBody.puts("var i = 0;")
-    outMethodBody.puts(s"while (!$io.IsEof) {")
+    outMethodBody.puts(s"while (!ks_stream_is_eof($io_new)) {")
+    outMethodBody.puts(s"int64_t $pos = data->$name->size;");
     outMethodBody.inc
   }
 
   override def handleAssignmentRepeatEos(id: Identifier, expr: String): Unit = {
-    outMethodBody.puts(s"${privateMemberName(id)}.Add($expr);")
+    val name = privateMemberName(RawIdentifier(id))
+    val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)})"
+    outMethodBody.puts(s"data->$name->size++;")
+    outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
+    outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
+    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
   }
 
   override def condRepeatEosFooter: Unit = {
-    outMethodBody.puts("i++;")
     outMethodBody.dec
     outMethodBody.puts("}")
     outMethodBody.dec
@@ -475,7 +481,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val eosError2 = if (eosError) 1 else 0
         outMethodHead.puts(s"ks_bytes _raw_$name;")
         outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes_term($io_new, $terminator, $include2, $consume2, $eosError2));")
-        val expr2 = expr.replace("__EXPR__", s"&_raw_$name")
+        val expr2 = expr.replace("__EXPR__", s"_raw_$name")
         outMethodBody.puts(s"data->$nameTarget = $expr2;")
       case BitsType1(bitEndian) =>
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, 1));")
