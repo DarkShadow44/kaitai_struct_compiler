@@ -118,7 +118,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrc.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_$className* data)")
       outSrc.puts("{")
       outSrc.inc
-      outSrc.puts(s"return ksx_read_$className(stream, data, 0, stream, data);")
+      outSrc.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
+      outSrc.puts("return *stream->err;")
       outSrc.dec
       outSrc.puts("}")
     } else {
@@ -157,10 +158,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     currentClassName = className
     val rootName = makeName(rootClassName)
     val parentName = kaitaiType2NativeType(parentType)
-    outSrcDefs.puts(s"static int ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);");
+    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);");
     outSrc.puts
-    outSrc.puts(s"static int ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data)")
-    outMethodBody.puts(s"    CHECK(ks_handle_init(&data->_handle, stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
+    outSrc.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data)")
+    outMethodBody.puts(s"    CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
     typeParents += (className -> parentName)
   }
 
@@ -197,7 +198,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (outMethodHead.result != "") {
         outSrc.puts
     }
-    outMethodBody.puts(s"CHECK(ksx_read_${currentClassName}_instances(root_stream, root_data, parent_data, stream, data));")
+    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, parent_data, stream, data));")
     outSrc.add(outMethodBody)
     outSrc.puts
     outSrc.puts("}")
@@ -378,7 +379,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
     outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}), data->$name->size);")
-    outMethodBody.puts(s"CHECK(ks_handle_init(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -401,7 +402,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
-    outMethodBody.puts(s"CHECK(ks_handle_init(&data->$name->_handle, stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")} = {0};")
@@ -453,18 +454,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     dataType match {
       case t: ReadableType =>
-        outMethodHead.puts(s"$targetType $name;")
-        outMethodBody.puts(s"CHECK(ks_stream_read_${t.apiCall(defEndian)}($io_new, &$name));")
-        outMethodBody.puts(s"data->$nameTarget = $name;")
+        outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_${t.apiCall(defEndian)}($io_new));")
       case blt: BytesLimitType =>
         outMethodHead.puts(s"ks_bytes _raw_$name;")
         id match {
           case RawIdentifier(_) =>
             outMethodHead.puts(s"ks_stream _io_$name;")
             outMethodBody.puts(s"/* Subtype with substream */")
-            outMethodBody.puts(s"CHECK(ks_stream_read_bytes($io_new, ${expression(blt.size)}, &_raw_$name));")
+            outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
           case _ =>
-            outMethodBody.puts(s"CHECK(ks_stream_read_bytes($io_new, ${expression(blt.size)}, &_raw_$name));")
+            outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
             val expr2 = expr.replace("__EXPR__", s"_raw_$name")
             outMethodBody.puts(s"data->$nameTarget = $expr2;")
         }
@@ -475,37 +474,33 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val consume2 = if (consume) 1 else 0
         val eosError2 = if (eosError) 1 else 0
         outMethodHead.puts(s"ks_bytes _raw_$name;")
-        outMethodBody.puts(s"CHECK(ks_stream_read_bytes_term($io_new, $terminator, $include2, $consume2, $eosError2, &_raw_$name));")
+        outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes_term($io_new, $terminator, $include2, $consume2, $eosError2));")
         val expr2 = expr.replace("__EXPR__", s"&_raw_$name")
         outMethodBody.puts(s"data->$nameTarget = $expr2;")
       case BitsType1(bitEndian) =>
-        outMethodHead.puts(s"uint64_t $name;")
-        outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, 1, &$name));")
-        outMethodBody.puts(s"data->$nameTarget = $name;")
+        outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, 1));")
       case BitsType(width: Int, bitEndian) =>
-        outMethodHead.puts(s"uint64_t $name;")
-        outMethodBody.puts(s"CHECK(ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width, &$name));")
-        outMethodBody.puts(s"data->$nameTarget = $name;")
+        outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width));")
       case t: UserTypeFromBytes =>
         val typeName = makeName(t.classSpec.get.name)
-        outMethodBody.puts(s"CHECK(ks_stream_init_from_bytes(&_io_$name, &_raw_$name));")
+        outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_create_from_bytes(&_io_$name));")
         if (isArray) {
-          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, &data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, data->$nameTarget));")
         }
       case t: UserTypeInstream =>
         val typeName = makeName(t.classSpec.get.name)
         outMethodBody.puts(s"/* Subtype */")
         if (isArray) {
-          outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, data, $io_new, &data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, $io_new, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
           if (importedTypes.contains(typeName)) {
-            outMethodBody.puts(s"CHECK(ksx_read_${typeName}_from_stream($io_new, data->$nameTarget));")
+            outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, data->$nameTarget));")
           } else {
-            outMethodBody.puts(s"CHECK(ksx_read_$typeName(root_stream, root_data, data, $io_new, data->$nameTarget));")
+            outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, $io_new, data->$nameTarget));")
           }
         }
       case _ =>
@@ -650,8 +645,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val rootClassName = classNameList.head.toLowerCase()
     val className = makeName(classNameList)
     val parentName = typeParents.get(className).get
-    outSrcDefs.puts(s"static int ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);")
-    outSrc.puts(s"static int ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data)")
+    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);")
+    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data)")
     outSrc.puts("{")
     outMethodHead.inc
     outMethodBody.inc
@@ -666,7 +661,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
     outSrc.add(outMethodBody)
     outSrc.puts
-    outSrc.puts("    return 0;")
     outSrc.puts("}")
     outMethodHead = new StringLanguageOutputWriter(indent)
     outMethodBody = new StringLanguageOutputWriter(indent)
