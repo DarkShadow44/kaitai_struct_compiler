@@ -263,7 +263,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def universalDoc(doc: DocSpec): Unit = {}
 
   override def attrParseHybrid(leProc: () => Unit, beProc: () => Unit): Unit = {
-    outMethodBody.puts(s"if (${privateMemberName(EndianIdentifier)} == true) {")
+    outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)}) {")
     outMethodBody.inc
     leProc()
     outMethodBody.dec
