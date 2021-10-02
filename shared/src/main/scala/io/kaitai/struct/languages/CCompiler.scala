@@ -305,7 +305,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def seek(io: String, pos: Ast.expr): Unit =
-    outMethodBody.puts(s"CHECK(ks_stream_seek(stream, ${expression(pos)}));")
+    outMethodBody.puts(s"CHECKV(ks_stream_seek(stream, ${expression(pos)}));")
 
   override def popPos(io: String): Unit = {
     // outMethodBody.puts(s"$io.Seek(_pos);")
