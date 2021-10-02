@@ -130,7 +130,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
 
   // Predefined methods of various types
   override def strToInt(s: expr, base: expr): String = {
-    s"Convert.ToInt64(${translate(s)}, ${translate(base)})"
+    s"ks_string_to_int(${translate(s)}, ${translate(base)})"
   }
   override def enumToInt(v: expr, et: EnumType): String =
     translate(v)
@@ -146,7 +146,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"${translate(s)}.len"
 
   override def strReverse(s: expr): String =
-    s"${CCompiler.kstreamName}.StringReverse(${translate(s)})"
+    s"ks_string_reverse(${translate(s)})"
 
   override def strSubstring(s: expr, from: expr, to: expr): String =
     s"ks_string_substr(${translate(s)}, ${translate(from)}, ${translate(to)})"
