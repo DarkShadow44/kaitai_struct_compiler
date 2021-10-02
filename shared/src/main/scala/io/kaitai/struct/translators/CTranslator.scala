@@ -152,14 +152,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"${translate(s)}.Substring(${translate(from)}, ${translate(to)} - ${translate(from)})"
 
   override def doStrCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr): String = {
-    s"(strcmp(${getRawString(left)}, ${getRawString(right)}) ${cmpOp(op)} 0)"
-  }
-
-  def getRawString(e: Ast.expr): String = {
-    e match {
-      case expr.Name(_) => translate(e) + ".data"
-      case _ => translate(e)
-    }
+    s"(ks_string_strcmp(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
   }
 
   override def doStringLiteral(s: String): String = {
