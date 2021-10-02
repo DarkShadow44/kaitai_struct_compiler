@@ -84,7 +84,7 @@ object Main {
 
     val cc = lang match {
       case CCompiler =>
-        new CClassCompiler(specs, spec, config)
+        new CClassCompiler(specs, spec, conf)
       case GraphvizClassCompiler =>
         new GraphvizClassCompiler(specs, spec)
       case GoCompiler =>
