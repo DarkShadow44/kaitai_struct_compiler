@@ -514,8 +514,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
   }
 
-  override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit =
-    outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} $id = $expr;")
+  override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit = {}
 
   override def blockScopeHeader: Unit = {
     outMethodBody.puts("{")
@@ -552,14 +551,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     expr2
   }
 
-  override def userTypeDebugRead(id: String, dataType: DataType, assignType: DataType): Unit = {
-    val expr = if (assignType != dataType) {
-      s"((${kaitaiType2NativeType(dataType)}) ($id))"
-    } else {
-      id
-    }
-    outMethodBody.puts(s"$expr._read();")
-  }
+  override def userTypeDebugRead(id: String, dataType: DataType, assignType: DataType): Unit = {}
 
   override def switchRequiresIfs(onType: DataType): Boolean = onType match {
     case _: IntType | _: EnumType => false
