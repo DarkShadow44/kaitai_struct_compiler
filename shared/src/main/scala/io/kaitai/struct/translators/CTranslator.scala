@@ -107,7 +107,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def doEnumById(enumTypeAbs: List[String], id: String): String = id
 
   override def doBytesCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr): String =
-    s"(${CCompiler.kstreamName}.ByteArrayCompare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
+    s"(ks_bytes_compare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
 
   override def arraySubscript(container: expr, idx: expr): String =
     s"${translate(container)}->data[${translate(idx)}]"
@@ -152,7 +152,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"${translate(s)}.Substring(${translate(from)}, ${translate(to)} - ${translate(from)})"
 
   override def doStrCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr): String = {
-    s"(ks_string_strcmp(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
+    s"(ks_string_compare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
   }
 
   override def doStringLiteral(s: String): String = {

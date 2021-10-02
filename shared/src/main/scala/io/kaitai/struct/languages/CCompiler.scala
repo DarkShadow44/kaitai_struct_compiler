@@ -140,6 +140,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outStruct.inc
     outStruct.puts("ks_handle _handle;")
     outHdrDefs.puts(s"typedef struct ksx_${className}_ ksx_${className};")
+
+    typeProvider.nowClass.meta.endian match {
+      case Some(_: CalcEndian) | Some(InheritedEndian) =>
+        outStruct.puts(s"ks_bool ${privateMemberName(EndianIdentifier)};")
+      case _ =>
+        // no _is_le variable
+    }
   }
 
   override def classFooter(name: List[String]): Unit = {
@@ -152,43 +159,55 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   var currentClassName = ""
+  var currentRootName = ""
+  var currentParentName = ""
 
   override def classConstructorHeader(name: List[String], parentType: DataType, rootClassName: List[String], isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
     val className = makeName(name)
     currentClassName = className
     val rootName = makeName(rootClassName)
+    currentRootName = rootName
     val parentName = kaitaiType2NativeType(parentType)
+    currentParentName = parentName
     outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);");
     outSrc.puts
     outSrc.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data)")
-    outMethodBody.puts(s"    CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
+    outSrc.puts("{")
+    outSrc.inc
+    outSrc.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
     typeParents += (className -> parentName)
   }
 
-  override def classConstructorFooter: Unit = {}
+  override def classConstructorFooter: Unit = {
+    outSrc.dec
+    outSrc.puts("}")
+  }
 
-  override def runRead(name: List[String]): Unit = {}
+  override def runRead(name: List[String]): Unit = {
+    outSrc.puts(s"ksx_read_${currentClassName}_x(root_stream, root_data, parent_data, stream, data);");
+  }
 
   override def runReadCalc(): Unit = {
     outMethodBody.puts
-    outMethodBody.puts(s"if (${privateMemberName(EndianIdentifier)} == null) {")
+    outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)}) {")
     outMethodBody.inc
-    outMethodBody.puts(s"throw new ${ksErrorName(UndecidedEndiannessError)}();")
-    importList.add("System")
-    outMethodBody.dec
-    outMethodBody.puts(s"} else if (${privateMemberName(EndianIdentifier)} == true) {")
-    outMethodBody.inc
-    outMethodBody.puts("_readLE();")
+    outMethodBody.puts(s"ksx_read_${currentClassName}_le(root_stream, root_data, parent_data, stream, data);");
     outMethodBody.dec
     outMethodBody.puts("} else {")
     outMethodBody.inc
-    outMethodBody.puts("_readBE();")
+    outMethodBody.puts(s"ksx_read_${currentClassName}_be(root_stream, root_data, parent_data, stream, data);");
     outMethodBody.dec
     outMethodBody.puts("}")
   }
 
   override def readHeader(endian: Option[FixedEndian], isEmpty: Boolean) = {
-	outSrc.puts("{")
+    val suffix = endian match {
+      case Some(e) => e.toSuffix
+      case None => "x"
+    }
+    outSrcDefs.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, $currentParentName* parent_data, ks_stream* stream, ksx_$currentClassName* data);");
+    outMethodBody.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, $currentParentName* parent_data, ks_stream* stream, ksx_$currentClassName* data)");
+	outMethodBody.puts("{")
     outMethodHead.inc
     outMethodBody.inc
   }
