@@ -159,22 +159,31 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"ks_string_from_cstr(${super.doStringLiteral(s)})"
   }
 
+  override def bytesFirst(b: Ast.expr): String =
+    s"ks_bytes_get_at(${translate(b)}, 0)"
+
   override def bytesLength(b: Ast.expr): String =
     s"${translate(b)}.length"
 
   override def bytesLast(b: Ast.expr): String = {
     val v = translate(b)
-    s"$v.data[$v.length - 1]"
+    s"ks_bytes_get_at($v, $v.length - 1)"
   }
+
+  override def bytesSubscript(container: Ast.expr, idx: Ast.expr): String =
+    s"ks_bytes_get_at(${translate(container)}, ${translate(idx)})"
 
   override def arrayFirst(a: expr): String =
     s"${translate(a)}->data[0]"
+
   override def arrayLast(a: expr): String = {
     val v = translate(a)
     s"$v->data[$v->size - 1]"
   }
+
   override def arraySize(a: expr): String =
     s"${translate(a)}->size"
+
   override def arrayMin(a: Ast.expr): String = {
     var res = translate(a)
     var typeArray = detectType(a)
@@ -184,8 +193,10 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
           case _ : IntType => s"ks_array_min_int(&$res->_handle)"
           case _ : FloatType => s"ks_array_min_float(&$res->_handle)"
           case _ : StrType => s"ks_array_min_string(&$res->_handle)"
+          case _ : BytesType => s"ks_array_min_bytes(&$res->_handle)"
           case _ => "UNKNOWN_Min: " + t.toString()
         }
+      case _ : BytesType => s"ks_bytes_min($res)"
       case _ => "UNKNOWN_Min: " + typeArray.toString()
     }
   }
@@ -198,8 +209,10 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
           case _ : IntType => s"ks_array_max_int(&$res->_handle)"
           case _ : FloatType => s"ks_array_max_float(&$res->_handle)"
           case _ : StrType => s"ks_array_max_string(&$res->_handle)"
+          case _ : BytesType => s"ks_array_max_bytes(&$res->_handle)"
           case _ => "UNKNOWN_Max: " + t.toString()
         }
+      case _ : BytesType => s"ks_bytes_max($res)"
       case _ => "UNKNOWN_Max: " + typeArray.toString()
     }
   }
