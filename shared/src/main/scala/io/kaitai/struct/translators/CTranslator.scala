@@ -149,7 +149,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"${CCompiler.kstreamName}.StringReverse(${translate(s)})"
 
   override def strSubstring(s: expr, from: expr, to: expr): String =
-    s"ks_string_substr(${translate(s)}, (${translate(from)}, ${translate(to)})"
+    s"ks_string_substr(${translate(s)}, ${translate(from)}, ${translate(to)})"
 
   override def doStrCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr): String = {
     s"(ks_string_compare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
