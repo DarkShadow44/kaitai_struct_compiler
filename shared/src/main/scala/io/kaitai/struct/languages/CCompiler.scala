@@ -705,7 +705,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrArrays.puts(s"typedef struct ksx_array_${enumClass}_")
     outHdrArrays.puts("{")
     outHdrArrays.inc
-    outHdrArrays.puts("ks_handle* _handle;")
+    outHdrArrays.puts("ks_handle _handle;")
     outHdrArrays.puts("int64_t size;")
     outHdrArrays.puts(s"ksx_$enumClass* data;")
     outHdrArrays.dec
