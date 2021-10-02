@@ -313,7 +313,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def alignToByte(io: String): Unit = {
     val io_new = if (io == "_io") "stream" else s"&$io"
-    outMethodBody.puts(s"CHECK(ks_stream_align_to_byte($io_new));")
+    outMethodBody.puts(s"CHECKV(ks_stream_align_to_byte($io_new));")
   }
 
   override def instanceClear(instName: InstanceIdentifier): Unit = {}
@@ -483,7 +483,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width));")
       case t: UserTypeFromBytes =>
         val typeName = makeName(t.classSpec.get.name)
-        outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_create_from_bytes(&_io_$name));")
+        outMethodBody.puts(s"CHECKV(_io_$name = ks_stream_create_from_bytes(&_raw_$name));")
         if (isArray) {
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, &data->$nameTarget));")
         } else {
@@ -536,11 +536,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def bytesPadTermExpr(expr0: String, padRight: Option[Int], terminator: Option[Int], include: Boolean) = {
     val expr1 = padRight match {
-      case Some(padByte) => s"$kstreamName.BytesStripRight($expr0, $padByte)"
+      case Some(padByte) => s"ks_bytes_strip_right($expr0, $padByte)"
       case None => expr0
     }
     val expr2 = terminator match {
-      case Some(term) => s"$kstreamName.BytesTerminate($expr1, $term, $include)"
+      case Some(term) => s"ks_bytes_terminate($expr1, $term, ${if (include) 1 else 0})"
       case None => expr1
     }
     expr2
