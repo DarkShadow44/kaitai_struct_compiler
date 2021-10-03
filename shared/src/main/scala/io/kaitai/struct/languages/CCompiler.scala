@@ -169,6 +169,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val rootName = makeName(rootClassName)
     currentRootName = rootName
     val parentName = kaitaiType2NativeType(parentType)
+    val outStruct = outHdrStructs.last
     currentParentName = parentName
     outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);");
     outSrc.puts
@@ -176,6 +177,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrc.puts("{")
     outSrc.inc
     outSrc.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
+    outStruct.puts(s"$parentName* _parent;")
+    outSrc.puts(s"data->_parent = parent_data;")
     typeParents += (className -> parentName)
   }
 
