@@ -493,7 +493,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodHead.puts(s"ks_bytes _raw_$name;")
         id match {
           case RawIdentifier(_) =>
-            outMethodHead.puts(s"ks_stream _io_$name;")
+            outMethodHead.puts(s"ks_stream* _io_$name;")
             outMethodBody.puts(s"/* Subtype with substream */")
             outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
           case _ =>
@@ -519,11 +519,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val typeName = makeName(t.classSpec.get.name)
         outMethodBody.puts(s"CHECKV(_io_$name = ks_stream_create_from_bytes(_raw_$name));")
         if (isArray) {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, &data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, _io_$name, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, _io_$name, data->$nameTarget));")
         }
+        outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
         val typeName = makeName(t.classSpec.get.name)
         outMethodBody.puts(s"/* Subtype */")
