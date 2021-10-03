@@ -513,6 +513,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case _: BytesEosType =>
         outMethodHead.puts(s"ks_bytes _raw_$name;")
         outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes_full($io_new));")
+        id match {
+          case RawIdentifier(_) =>
+          case _ =>
+            val expr2 = expr.replace("__EXPR__", s"_raw_$name")
+            outMethodBody.puts(s"data->$nameTarget = $expr2;")
+        }
       case BytesTerminatedType(terminator, include, consume, eosError, _) =>
         val include2 = if (include) 1 else 0
         val consume2 = if (consume) 1 else 0
