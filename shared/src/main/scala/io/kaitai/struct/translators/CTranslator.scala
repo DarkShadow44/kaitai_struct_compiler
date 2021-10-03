@@ -143,7 +143,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"ks_string_from_bytes($bytesExpr)"
 
   override def strLength(s: expr): String =
-    s"${translate(s)}.len"
+    s"${translate(s)}->len"
 
   override def strReverse(s: expr): String =
     s"ks_string_reverse(${translate(s)})"
@@ -163,11 +163,11 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     s"ks_bytes_get_at(${translate(b)}, 0)"
 
   override def bytesLength(b: Ast.expr): String =
-    s"${translate(b)}.length"
+    s"${translate(b)}->length"
 
   override def bytesLast(b: Ast.expr): String = {
     val v = translate(b)
-    s"ks_bytes_get_at($v, $v.length - 1)"
+    s"ks_bytes_get_at($v, $v->length - 1)"
   }
 
   override def bytesSubscript(container: Ast.expr, idx: Ast.expr): String =

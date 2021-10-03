@@ -499,14 +499,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         return
     }
     val io_new = makeIO(io)
-    // outMethodBody.puts("//" + io + " -> " + dataType.toString() + " __ " + assignType.toString())
+    //outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
     val targetType = kaitaiType2NativeType(dataType)
 
     dataType match {
       case t: ReadableType =>
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_${t.apiCall(defEndian)}($io_new));")
       case blt: BytesLimitType =>
-        outMethodHead.puts(s"ks_bytes _raw_$name;")
+        outMethodHead.puts(s"ks_bytes* _raw_$name;")
         outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
         id match {
           case RawIdentifier(_) =>
@@ -515,7 +515,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             outMethodBody.puts(s"data->$nameTarget = $expr2;")
         }
       case _: BytesEosType =>
-        outMethodHead.puts(s"ks_bytes _raw_$name;")
+        outMethodHead.puts(s"ks_bytes* _raw_$name;")
         outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes_full($io_new));")
         id match {
           case RawIdentifier(_) =>
@@ -527,7 +527,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val include2 = if (include) 1 else 0
         val consume2 = if (consume) 1 else 0
         val eosError2 = if (eosError) 1 else 0
-        outMethodHead.puts(s"ks_bytes _raw_$name;")
+        outMethodHead.puts(s"ks_bytes *_raw_$name;")
         outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes_term($io_new, $terminator, $include2, $consume2, $eosError2));")
         val expr2 = expr.replace("__EXPR__", s"_raw_$name")
         outMethodBody.puts(s"data->$nameTarget = $expr2;")
@@ -862,8 +862,8 @@ object CCompiler extends LanguageCompilerStatic
       case CalcFloatType => "double"
       case _: BooleanType => "ks_bool"
 
-      case _: StrType => "ks_string"
-      case _: BytesType => "ks_bytes"
+      case _: StrType => "ks_string*"
+      case _: BytesType => "ks_bytes*"
 
       case AnyType => "void"
       case KaitaiStructType | CalcKaitaiStructType => kstructName
