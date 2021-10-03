@@ -539,25 +539,35 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case BitsType(width: Int, bitEndian) =>
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width));")
       case t: UserTypeFromBytes =>
+        val parent = t.forcedParent match {
+          case Some(USER_TYPE_NO_PARENT) => "0"
+          case Some(fp) => translator.translate(fp)
+          case None => "data"
+        }
         val typeName = makeName(t.classSpec.get.name)
         if (isArray) {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, _io_$name, &data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, _io_$name, data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, data->$nameTarget));")
         }
         outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
+        val parent = t.forcedParent match {
+          case Some(USER_TYPE_NO_PARENT) => "0"
+          case Some(fp) => translator.translate(fp)
+          case None => "data"
+        }
         val typeName = makeName(t.classSpec.get.name)
         outMethodBody.puts(s"/* Subtype */")
         if (isArray) {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, $io_new, &data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
           if (importedTypes.contains(typeName)) {
             outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, data->$nameTarget));")
           } else {
-            outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, $io_new, data->$nameTarget));")
+            outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, data->$nameTarget));")
           }
         }
       case _ =>
