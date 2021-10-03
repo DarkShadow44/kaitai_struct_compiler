@@ -517,7 +517,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width));")
       case t: UserTypeFromBytes =>
         val typeName = makeName(t.classSpec.get.name)
-        outMethodBody.puts(s"CHECKV(_io_$name = ks_stream_create_from_bytes(&_raw_$name));")
+        outMethodBody.puts(s"CHECKV(_io_$name = ks_stream_create_from_bytes(_raw_$name));")
         if (isArray) {
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, &_io_$name, &data->$nameTarget));")
         } else {
