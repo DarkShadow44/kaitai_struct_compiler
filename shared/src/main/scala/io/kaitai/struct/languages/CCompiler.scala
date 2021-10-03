@@ -40,6 +40,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
   val importedTypes : ListBuffer[String] = ListBuffer()
   val typeParents : scala.collection.mutable.Map[String, String] = scala.collection.mutable.Map()
+  var outMethodHasI = false
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
 
@@ -206,13 +207,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case None => "x"
     }
     outSrcDefs.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, $currentParentName* parent_data, ks_stream* stream, ksx_$currentClassName* data);");
-    outMethodBody.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, $currentParentName* parent_data, ks_stream* stream, ksx_$currentClassName* data)");
-	outMethodBody.puts("{")
+    outSrc.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, $currentParentName* parent_data, ks_stream* stream, ksx_$currentClassName* data)");
+    outSrc.puts("{")
     outMethodHead.inc
     outMethodBody.inc
   }
 
   override def readFooter(): Unit = {
+    if (outMethodHasI)
+    {
+      val index = translator.doName(Identifier.INDEX)
+      outMethodHead.puts(s"int64_t $index;")
+      outMethodHasI = false
+    }
     outSrc.add(outMethodHead)
     if (outMethodHead.result != "") {
         outSrc.puts
@@ -360,10 +367,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw): Unit = {
     val name = privateMemberName(RawIdentifier(id))
-    val pos = "_pos_" + privateMemberName(id)
+    val pos = translator.doName(Identifier.INDEX)
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
     val io_new = if (io == "_io") "stream" else s"&$io"
+    outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-eos) */")
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
@@ -372,7 +380,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"while (!ks_stream_is_eof($io_new)) {")
-    outMethodBody.puts(s"int64_t $pos = data->$name->size;");
+    outMethodBody.puts(s"$pos = data->$name->size;");
     outMethodBody.inc
   }
 
@@ -393,13 +401,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, repeatExpr: expr): Unit = {
-    val pos = "_pos_" + privateMemberName(id)
+    val pos = translator.doName(Identifier.INDEX)
     val len = expression(repeatExpr)
     val name = privateMemberName(RawIdentifier(id))
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-expr) */")
-    outMethodHead.puts(s"int64_t $pos;")
 
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
@@ -417,13 +425,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def condRepeatExprFooter: Unit = fileFooter(null)
 
   override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
-    val pos = "_pos_" + privateMemberName(id)
+    val pos = translator.doName(Identifier.INDEX)
     val name = privateMemberName(RawIdentifier(id))
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-until) */")
-    outMethodHead.puts(s"int64_t $pos;")
-
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
@@ -444,11 +451,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
-    outMethodBody.puts(s"$nameTemp = data->$name->data[_pos_$name];");
+    val pos = translator.doName(Identifier.INDEX)
+    outMethodBody.puts(s"$nameTemp = data->$name->data[$pos];");
   }
 
   override def condRepeatUntilFooter(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
-    val pos = "_pos_" + privateMemberName(id)
+    val pos = translator.doName(Identifier.INDEX)
     typeProvider._currentIteratorType = Some(dataType)
     outMethodBody.puts(s"$pos++;")
     outMethodBody.dec
@@ -467,7 +475,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val name = privateMemberName(id)
     var nameTarget = name
     if (isArray) {
-        nameTarget = s"$name->data[_pos_$name]"
+        val pos = translator.doName(Identifier.INDEX)
+        nameTarget = s"$name->data[$pos]"
     }
     if (lastWasInstanceValue) {
         lastWasInstanceValue = false
