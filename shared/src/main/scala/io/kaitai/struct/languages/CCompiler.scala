@@ -333,7 +333,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def useIO(ioEx: expr): String = {
-    outMethodBody.puts(s"$kstreamName io = ${expression(ioEx)};")
+    outMethodBody.puts(s"$kstreamName* io = ${expression(ioEx)};")
     "io"
   }
 
