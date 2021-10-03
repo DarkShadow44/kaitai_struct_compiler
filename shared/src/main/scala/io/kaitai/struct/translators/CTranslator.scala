@@ -232,5 +232,8 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def doBoolLiteral(n: Boolean): String = if (n) "1" else "0"
   override def kaitaiStreamEof(value: Ast.expr): String =
     s"ks_stream_is_eof(${translate(value)})"
-  override def kaitaiStreamSize(value: Ast.expr): String = anyField(value, "length")
+  override def kaitaiStreamSize(value: Ast.expr): String =
+    s"ks_stream_get_length(${translate(value)})"
+  override def kaitaiStreamPos(value: Ast.expr): String =
+    s"ks_stream_get_pos(${translate(value)})"
 }
