@@ -59,11 +59,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def indent: String = "    "
 
   override def fileHeader(topClassName: String): Unit = {
-    outSrcHeader.puts(s"// $headerComment")
+    outSrcHeader.puts(s"/* $headerComment */")
     outSrcHeader.puts
     outSrcHeader.puts("#define KS_DEPEND_ON_INTERNALS")
 
-    outHdrHeader.puts(s"// $headerComment")
+    outHdrHeader.puts(s"/* $headerComment */")
     outHdrHeader.puts
     outHdrHeader.puts(s"#ifndef KAITAI_${topClassName.toUpperCase()}_H")
     outHdrHeader.puts(s"#define KAITAI_${topClassName.toUpperCase()}_H")
