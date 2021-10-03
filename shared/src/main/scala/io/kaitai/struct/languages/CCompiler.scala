@@ -213,7 +213,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
   }
 
-  override def readFooter(): Unit = {
+  def makeFooter(instance: Boolean) : Unit = {
     if (outMethodHasI)
     {
       val index = translator.doName(Identifier.INDEX)
@@ -224,13 +224,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (outMethodHead.result != "") {
         outSrc.puts
     }
-    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, parent_data, stream, data));")
+    if (!instance) {
+      outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, parent_data, stream, data));")
+    }
     outSrc.add(outMethodBody)
     outSrc.puts
     outSrc.puts("}")
     outMethodHead = new StringLanguageOutputWriter(indent)
     outMethodBody = new StringLanguageOutputWriter(indent)
   }
+
+  override def readFooter(): Unit = makeFooter(false)
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
     val outStruct = outHdrStructs.last
@@ -696,17 +700,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def instanceHeader(className: List[String], instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {}
 
-  override def instanceFooter: Unit = {
-    outSrc.add(outMethodHead)
-    if (outMethodHead.result != "") {
-        outSrc.puts
-    }
-    outSrc.add(outMethodBody)
-    outSrc.puts
-    outSrc.puts("}")
-    outMethodHead = new StringLanguageOutputWriter(indent)
-    outMethodBody = new StringLanguageOutputWriter(indent)
-  }
+  override def instanceFooter: Unit = makeFooter(true)
 
   override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {}
 
