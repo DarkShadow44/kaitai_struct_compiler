@@ -610,6 +610,31 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   val NAME_SWITCH_ON = Ast.expr.Name(Ast.identifier(Identifier.SWITCH_ON))
 
+  var outMethodHeadOldSwitch: StringLanguageOutputWriter = null
+  var outMethodBodyOldSwitch: StringLanguageOutputWriter = null
+
+  def switchOverrideStart() : Unit = {
+    outMethodHeadOldSwitch = outMethodHead
+    outMethodBodyOldSwitch = outMethodBody
+    outMethodHead = new StringLanguageOutputWriter(indent)
+    outMethodBody = new StringLanguageOutputWriter(indent)
+    outMethodHead.indentLevel = outMethodBodyOldSwitch.indentLevel
+    outMethodBody.indentLevel = outMethodBodyOldSwitch.indentLevel
+  }
+
+  def switchOverrideEnd() : Unit = {
+    outMethodBodyOldSwitch.add(outMethodHead)
+    if (outMethodHead.result != "") {
+        outMethodBodyOldSwitch.puts
+    }
+    outMethodBodyOldSwitch.add(outMethodBody)
+
+    outMethodHead = outMethodHeadOldSwitch
+    outMethodBody = outMethodBodyOldSwitch
+    outMethodHeadOldSwitch = null;
+    outMethodBodyOldSwitch = null
+  }
+
   override def switchStart(id: Identifier, on: Ast.expr): Unit =
     outMethodBody.puts(s"switch (${expression(on)}) {")
 
@@ -618,9 +643,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def switchCaseStart(condition: Ast.expr): Unit = {
     outMethodBody.puts(s"case ${expression(condition)}: {")
     outMethodBody.inc
+    switchOverrideStart()
   }
 
   override def switchCaseEnd(): Unit = {
+    switchOverrideEnd()
     outMethodBody.puts("break;")
     outMethodBody.dec
     outMethodBody.puts("}")
@@ -629,6 +656,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def switchElseStart(): Unit = {
     outMethodBody.puts("default: {")
     outMethodBody.inc
+     switchOverrideStart()
   }
 
   override def switchEnd(): Unit =
@@ -657,15 +685,18 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"if (${switchCmpExpr(condition)})")
     outMethodBody.puts("{")
     outMethodBody.inc
+    switchOverrideStart()
   }
 
   override def switchIfCaseStart(condition: Ast.expr): Unit = {
     outMethodBody.puts(s"else if (${switchCmpExpr(condition)})")
     outMethodBody.puts("{")
     outMethodBody.inc
+    switchOverrideStart()
   }
 
   override def switchIfCaseEnd(): Unit = {
+    switchOverrideEnd()
     outMethodBody.dec
     outMethodBody.puts("}")
   }
@@ -674,6 +705,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("else")
     outMethodBody.puts("{")
     outMethodBody.inc
+    switchOverrideStart()
   }
 
   override def switchIfEnd(): Unit = {
