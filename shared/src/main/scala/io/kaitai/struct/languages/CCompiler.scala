@@ -309,8 +309,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def allocateIO(varName: Identifier, rep: RepeatSpec): String = {
-    // We handle stuff differently already
-    ""
+    val privateVarName = privateMemberName(varName)
+
+    val ioName = s"_io_$privateVarName"
+
+    val args = rep match {
+      case RepeatUntil(_) => translator.doName(Identifier.ITERATOR2)
+      case _ => getRawIdExpr(varName, rep)
+    }
+
+    outMethodHead.puts(s"ks_stream* $ioName;")
+    outMethodBody.puts(s"/* Subtype with substream */")
+    outMethodBody.puts(s"$ioName = ks_stream_create_from_bytes(_raw_$args);")
+    ioName
   }
 
   def getRawIdExpr(varName: Identifier, rep: RepeatSpec): String = {
@@ -438,6 +449,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")} = {0};")
+    outMethodBody.puts(s"(void)${translator.doName("_")};")
     outMethodBody.puts(s"do")
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -491,13 +503,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_${t.apiCall(defEndian)}($io_new));")
       case blt: BytesLimitType =>
         outMethodHead.puts(s"ks_bytes _raw_$name;")
+        outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
         id match {
           case RawIdentifier(_) =>
-            outMethodHead.puts(s"ks_stream* _io_$name;")
-            outMethodBody.puts(s"/* Subtype with substream */")
-            outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
           case _ =>
-            outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
             val expr2 = expr.replace("__EXPR__", s"_raw_$name")
             outMethodBody.puts(s"data->$nameTarget = $expr2;")
         }
@@ -517,7 +526,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width));")
       case t: UserTypeFromBytes =>
         val typeName = makeName(t.classSpec.get.name)
-        outMethodBody.puts(s"CHECKV(_io_$name = ks_stream_create_from_bytes(_raw_$name));")
         if (isArray) {
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, data, _io_$name, &data->$nameTarget));")
         } else {
