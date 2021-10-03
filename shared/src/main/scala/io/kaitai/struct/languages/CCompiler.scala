@@ -39,7 +39,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outHdrFinish = new StringLanguageOutputWriter(indent)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
   val importedTypes : ListBuffer[String] = ListBuffer()
-  val typeParents : scala.collection.mutable.Map[String, String] = scala.collection.mutable.Map()
   var outMethodHasI = false
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
@@ -161,7 +160,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   var currentClassName = ""
   var currentRootName = ""
-  var currentParentName = ""
 
   override def classConstructorHeader(name: List[String], parentType: DataType, rootClassName: List[String], isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
     val className = makeName(name)
@@ -170,16 +168,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     currentRootName = rootName
     val parentName = kaitaiType2NativeType(parentType)
     val outStruct = outHdrStructs.last
-    currentParentName = parentName
-    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);");
+    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, void* parent_data, ks_stream* stream, ksx_$className* data);");
     outSrc.puts
-    outSrc.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data)")
+    outSrc.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, void* parent_data, ks_stream* stream, ksx_$className* data)")
     outSrc.puts("{")
     outSrc.inc
     outSrc.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
     outStruct.puts(s"$parentName* _parent;")
-    outSrc.puts(s"data->_parent = parent_data;")
-    typeParents += (className -> parentName)
+    outSrc.puts(s"data->_parent = ($parentName*)parent_data;")
   }
 
   override def classConstructorFooter: Unit = {
@@ -188,18 +184,18 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def runRead(name: List[String]): Unit = {
-    outSrc.puts(s"ksx_read_${currentClassName}_x(root_stream, root_data, parent_data, stream, data);");
+    outSrc.puts(s"ksx_read_${currentClassName}_x(root_stream, root_data, stream, data);");
   }
 
   override def runReadCalc(): Unit = {
     outMethodBody.puts
     outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)}) {")
     outMethodBody.inc
-    outMethodBody.puts(s"ksx_read_${currentClassName}_le(root_stream, root_data, parent_data, stream, data);");
+    outMethodBody.puts(s"ksx_read_${currentClassName}_le(root_stream, root_data, stream, data);");
     outMethodBody.dec
     outMethodBody.puts("} else {")
     outMethodBody.inc
-    outMethodBody.puts(s"ksx_read_${currentClassName}_be(root_stream, root_data, parent_data, stream, data);");
+    outMethodBody.puts(s"ksx_read_${currentClassName}_be(root_stream, root_data, stream, data);");
     outMethodBody.dec
     outMethodBody.puts("}")
   }
@@ -209,8 +205,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case Some(e) => e.toSuffix
       case None => "x"
     }
-    outSrcDefs.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, $currentParentName* parent_data, ks_stream* stream, ksx_$currentClassName* data);");
-    outSrc.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, $currentParentName* parent_data, ks_stream* stream, ksx_$currentClassName* data)");
+    outSrcDefs.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data);");
+    outSrc.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data)");
     outSrc.puts("{")
     outMethodHead.inc
     outMethodBody.inc
@@ -228,7 +224,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outSrc.puts
     }
     if (!instance) {
-      outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, parent_data, stream, data));")
+      outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, stream, data));")
     }
     outSrc.add(outMethodBody)
     outSrc.puts
@@ -549,7 +545,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, &data->$nameTarget));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget));")
         }
         outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
@@ -565,9 +561,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
           if (importedTypes.contains(typeName)) {
-            outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, data->$nameTarget));")
+            outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget));")
           } else {
-            outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, data->$nameTarget));")
+            outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_$typeName*)data->$nameTarget));")
           }
         }
       case _ =>
@@ -735,9 +731,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   def instanceStart(classNameList: List[String]): Unit = {
     val rootClassName = classNameList.head.toLowerCase()
     val className = makeName(classNameList)
-    val parentName = typeParents.get(className).get
-    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data);")
-    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, $parentName* parent_data, ks_stream* stream, ksx_$className* data)")
+    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data);")
+    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data)")
     outSrc.puts("{")
     outMethodHead.inc
     outMethodBody.inc
@@ -940,7 +935,7 @@ object CCompiler extends LanguageCompilerStatic
 
   def makeIO(io: String) = if (io == "_io") "stream" else io
 
-  override def kstructName = "void"
+  override def kstructName = "ks_usertype_generic"
   override def kstreamName = "ks_stream"
   override def ksErrorName(err: KSError): String = err match {
     case EndOfStreamError => "EndOfStreamException"

@@ -92,7 +92,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
         case Identifier.IO => "stream"
-        case Identifier.PARENT => "parent_data"
+        case Identifier.PARENT => "data->_parent"
         case Identifier.ROOT => "root_data"
         case _ => s"_temp$s"
       }
