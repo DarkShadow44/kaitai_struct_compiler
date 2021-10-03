@@ -349,7 +349,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def alignToByte(io: String): Unit = {
-    val io_new = if (io == "_io") "stream" else s"&$io"
+    val io_new = makeIO(io)
     outMethodBody.puts(s"CHECKV(ks_stream_align_to_byte($io_new));")
   }
 
@@ -381,7 +381,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val pos = translator.doName(Identifier.INDEX)
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
-    val io_new = if (io == "_io") "stream" else s"&$io"
+    val io_new = makeIO(io)
     outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-eos) */")
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
@@ -494,7 +494,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         lastWasInstanceValue = false
         return
     }
-    val io_new = if (io == "_io") "stream" else s"&$io"
+    val io_new = makeIO(io)
     // outMethodBody.puts("//" + io + " -> " + dataType.toString() + " __ " + assignType.toString())
     val targetType = kaitaiType2NativeType(dataType)
 
@@ -892,6 +892,8 @@ object CCompiler extends LanguageCompilerStatic
     else
       arr.drop(1).mkString("_").toLowerCase()
   }
+
+  def makeIO(io: String) = if (io == "_io") "stream" else io
 
   override def kstructName = "void"
   override def kstreamName = "ks_stream"
