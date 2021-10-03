@@ -332,7 +332,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val memberName = privateMemberName(varName)
     rep match {
       case NoRepeat => memberName
-      case _ => s"$memberName[$memberName.Count - 1]"
+      case _ => s"$memberName"
     }
   }
 
