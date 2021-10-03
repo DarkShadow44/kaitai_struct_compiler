@@ -771,7 +771,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"if (!(${translator.translate(checkExpr)}))")
     outMethodBody.puts("{")
     outMethodBody.inc
-    outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
+    //outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
+    outMethodBody.puts(s"*stream->err = 1;")
+    outMethodBody.puts(s"return;")
     outMethodBody.dec
     outMethodBody.puts("}")
   }
