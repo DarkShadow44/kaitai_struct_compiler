@@ -290,27 +290,26 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"${privateMemberName(attrName)} = $normalIO.EnsureFixedContents($contents);")
 
   override def attrProcess(proc: ProcessExpr, varSrc: Identifier, varDest: Identifier, rep: RepeatSpec): Unit = {
-    val srcExpr = getRawIdExpr(varSrc, rep)
+    val srcExpr = "_raw_" + getRawIdExpr(varSrc, rep)
 
     val expr = proc match {
       case ProcessXor(xorValue) =>
-        s"$normalIO.ProcessXor($srcExpr, ${expression(xorValue)})"
+        outMethodBody.puts(s"$srcExpr = ks_bytes_process_xor($srcExpr, ${expression(xorValue)});")
       case ProcessZlib =>
-        s"$normalIO.ProcessZlib($srcExpr)"
+        outMethodBody.puts(s"$normalIO.ProcessZlib($srcExpr)")
       case ProcessRotate(isLeft, rotValue) =>
         val expr = if (isLeft) {
           expression(rotValue)
         } else {
           s"8 - (${expression(rotValue)})"
         }
-        s"$normalIO.ProcessRotateLeft($srcExpr, $expr, 1)"
+        outMethodBody.puts(s"$normalIO.ProcessRotateLeft($srcExpr, $expr, 1)")
       case ProcessCustom(name, args) =>
         val procClass = types2class(name)
         val procName = s"_process_${idToStr(varSrc)}"
         outMethodBody.puts(s"$procClass $procName = new $procClass(${args.map(expression).mkString(", ")});")
         s"$procName.Decode($srcExpr)"
     }
-    handleAssignment(varDest, expr, rep, false)
   }
 
   override def allocateIO(varName: Identifier, rep: RepeatSpec): String = {
@@ -500,7 +499,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         return
     }
     val io_new = makeIO(io)
-    //outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
+    // outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
     val targetType = kaitaiType2NativeType(dataType)
 
     dataType match {
