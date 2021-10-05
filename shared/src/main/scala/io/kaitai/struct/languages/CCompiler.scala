@@ -752,13 +752,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     lastWasInstanceValue = true
     val name = privateMemberName(instName)
     val expr = expression(value)
-    //outMethodBody.puts(s"// " + dataType.toString())
-    dataType match {
-      case t : ArrayTypeInStream =>
-        outMethodBody.puts(s"*data->$name = $expr;")
-      case _ =>
-        outMethodBody.puts(s"data->$name = $expr;")
-    }
+    outMethodBody.puts(s"data->$name = $expr;")
   }
 
   override def enumDeclaration(curClass: List[String], enumName: String, enumColl: Seq[(Long, EnumValueSpec)]): Unit = {
@@ -888,6 +882,7 @@ object CCompiler extends LanguageCompilerStatic
           case t: EnumType => s"ksx_array_${makeName(t.enumSpec.get.name)}"
           case _: StrType => s"ks_array_string"
           case _: BytesType => s"ks_array_bytes"
+          case KaitaiStructType | CalcKaitaiStructType => s"ks_array_usertype_generic"
           case _ => s"ks_array_${kaitaiType2NativeType(at.elType)}"
         }
       }

@@ -10,22 +10,21 @@ import io.kaitai.struct.languages.CCompiler
 import io.kaitai.struct.languages.components.CppImportList
 
 class CTranslator(provider: TypeProvider, importList: CppImportList) extends BaseTranslator(provider) {
-  override def doArrayLiteral(t: DataType, value: Seq[expr]): String = {
-    val nativeType = CCompiler.kaitaiType2NativeType(t)
-    val commaStr = value.map((v) => translate(v)).mkString(", ")
-
+  def doArrayLiteralInternal(t: DataType, value: Seq[expr]): String = {
+    val size = value.size
+    val args = value.map(translate).mkString(", ")
     t match {
-      case CalcIntType => s"ks_array_int64_t_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
-      case CalcFloatType => s"ks_array_double_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
-      case CalcStrType => s"ks_array_string_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
-      case arr: CalcArrayType =>
-        arr.elType match {
-          case CalcIntType => s"ks_array_int64_t_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
-          case CalcFloatType => s"ks_array_double_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
-          case CalcStrType => s"ks_array_string_from_data(${value.size}, ${value.map(translate).mkString(", ")})"
-          case _ => s"Missing list type: " + t.toString()
-        }
+      case CalcIntType => s"ks_array_int64_t_from_data($size, $args)"
+      case CalcFloatType => s"ks_array_double_from_data($size, $args)"
+      case CalcStrType => s"ks_array_string_from_data($size, $args)"
+      case KaitaiStructType | CalcKaitaiStructType => s"ks_array_usertype_generic_from_data($size, $args)"
       case _ => s"Missing list type: " + t.toString()
+    }
+  }
+  override def doArrayLiteral(t: DataType, value: Seq[expr]): String = {
+    t match {
+      case arr: CalcArrayType => doArrayLiteralInternal(arr.elType, value)
+      case _ => doArrayLiteralInternal(t, value)
     }
   }
 
@@ -120,12 +119,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
       case t : BytesType => "*"
       case _ => ""
     }
-    val deref = typeName match {
-      case t: StrType => "*"
-      case t : BytesType => "*"
-      case _ => ""
-    }
-    s"($deref(${CCompiler.kaitaiType2NativeType(typeName)}$suffix) (${translate(value)}))"
+    s"((${CCompiler.kaitaiType2NativeType(typeName)}$suffix) (${translate(value)}))"
   }
 
   // Predefined methods of various types
