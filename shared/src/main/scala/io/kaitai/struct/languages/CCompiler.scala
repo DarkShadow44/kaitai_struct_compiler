@@ -304,11 +304,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           s"8 - (${expression(rotValue)})"
         }
         outMethodBody.puts(s"$normalIO.ProcessRotateLeft($srcExpr, $expr, 1)")
-      case ProcessCustom(name, args) =>
-        val procClass = types2class(name)
-        val procName = s"_process_${idToStr(varSrc)}"
-        outMethodBody.puts(s"$procClass $procName = new $procClass(${args.map(expression).mkString(", ")});")
-        s"$procName.Decode($srcExpr)"
+      case ProcessCustom(typename, args) =>
+        val name2 = idToStr(varSrc)
+        val procClass = typename.last
+        importListHdr.addLocal(outFileNameHeader(typename.last))
+        outMethodHead.puts(s"ks_custom_decoder _decoder_$name2;")
+        outMethodBody.puts(s"_decoder_$name2 = ${procClass}_create(${args.map(expression).mkString(", ")});")
+        outMethodBody.puts(s"$srcExpr = _decoder_$name2.decode(_decoder_$name2.userdata, $srcExpr);")
     }
   }
 
