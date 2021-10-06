@@ -119,8 +119,6 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def doCast(value: Ast.expr, typeName: DataType): String = {
     val suffix = typeName match {
       case t: UserType => "*"
-      case t: StrType => "*"
-      case t : BytesType => "*"
       case _ => ""
     }
     s"((${CCompiler.kaitaiType2NativeType(typeName)}$suffix) (${translate(value)}))"
