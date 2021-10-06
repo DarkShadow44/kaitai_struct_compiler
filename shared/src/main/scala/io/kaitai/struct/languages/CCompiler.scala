@@ -223,12 +223,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outMethodHead.puts(s"int64_t $index;")
       outMethodHasI = false
     }
+    if (!instance && outHdrStructs.length > 1) {
+      outMethodHead.puts(s"uint64_t _old_pos;")
+      outMethodBody.puts(s"_old_pos = stream->pos;")
+      outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, stream, data));")
+      outMethodBody.puts(s"ks_stream_seek(stream, _old_pos);")
+    }
     outSrc.add(outMethodHead)
     if (outMethodHead.result != "") {
         outSrc.puts
-    }
-    if (!instance && outHdrStructs.length > 1) {
-      outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, stream, data));")
     }
     outSrc.add(outMethodBody)
     outSrc.puts
