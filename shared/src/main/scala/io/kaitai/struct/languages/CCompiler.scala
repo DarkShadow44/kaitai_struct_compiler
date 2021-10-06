@@ -188,18 +188,18 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def runRead(name: List[String]): Unit = {
-    outSrc.puts(s"ksx_read_${currentClassName}_x(root_stream, root_data, stream, data);");
+    outSrc.puts(s"CHECKV(ksx_read_${currentClassName}_x(root_stream, root_data, stream, data));");
   }
 
   override def runReadCalc(): Unit = {
     outMethodBody.puts
     outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)}) {")
     outMethodBody.inc
-    outMethodBody.puts(s"ksx_read_${currentClassName}_le(root_stream, root_data, stream, data);");
+    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_le(root_stream, root_data, stream, data));");
     outMethodBody.dec
     outMethodBody.puts("} else {")
     outMethodBody.inc
-    outMethodBody.puts(s"ksx_read_${currentClassName}_be(root_stream, root_data, stream, data);");
+    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_be(root_stream, root_data, stream, data));");
     outMethodBody.dec
     outMethodBody.puts("}")
   }
