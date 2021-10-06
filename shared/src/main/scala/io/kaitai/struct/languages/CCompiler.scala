@@ -760,8 +760,21 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit = {
     lastWasInstanceValue = true
     val name = privateMemberName(instName)
-    val expr = expression(value)
-    outMethodBody.puts(s"data->$name = $expr;")
+    val ex = expression(value)
+    val op = dataType match {
+      case t: UserType =>
+        value match {
+          case expr.Subscript(_, _) => "&"
+          case expr.Attribute(_, attr) =>
+            attr.name match {
+              case "first" | "last" | "min" | "max" => "&"
+              case _ => ""
+            }
+          case _ => ""
+        }
+      case _ => ""
+    }
+    outMethodBody.puts(s"data->$name = $op$ex;")
   }
 
   override def enumDeclaration(curClass: List[String], enumName: String, enumColl: Seq[(Long, EnumValueSpec)]): Unit = {
