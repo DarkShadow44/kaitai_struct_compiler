@@ -131,7 +131,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outHdrArrays.inc
       outHdrArrays.puts("ks_handle _handle;")
       outHdrArrays.puts("int64_t size;")
-      outHdrArrays.puts(s"ksx_$className* data;")
+      outHdrArrays.puts(s"ksx_$className** data;")
       outHdrArrays.dec
       outHdrArrays.puts(s"} ksx_array_$className;")
       outHdrDefs.puts(s"typedef struct ksx_array_${className}_ ksx_array_${className};")
@@ -237,26 +237,24 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def readFooter(): Unit = makeFooter(false)
 
+  def getPtrSuffix(dataType: DataType): String = {
+    dataType match {
+      case t: UserType => "*"
+      case at: ArrayType => "*"
+      case KaitaiStructType | CalcKaitaiStructType => "*"
+      case AnyType => "*"
+      case sw: SwitchType => getPtrSuffix(sw.combinedType)
+      case _ => ""
+    }
+  }
+
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
     val outStruct = outHdrStructs.last
     if (idToStr(attrName) == "_parent" || idToStr(attrName) == "_root")
     {
       return
     }
-    val suffix = attrType match {
-      case t: UserType => "*"
-      case at: ArrayType => "*"
-      case KaitaiStructType | CalcKaitaiStructType => "*"
-      case AnyType => "*"
-      case sw: SwitchType =>
-        sw.combinedType match {
-          case t: UserType => "*"
-          case KaitaiStructType | CalcKaitaiStructType => "*"
-          case AnyType => "*"
-          case _ => ""
-        }
-      case _ => ""
-    }
+    val suffix = getPtrSuffix(attrType)
     val isSubtypeByte = attrName match {
         case RawIdentifier(_) => true
         case _ => false
@@ -327,10 +325,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     val ioName = s"_io_$privateVarName"
 
-    val args = rep match {
-      //case RepeatUntil(_) => translator.doName(Identifier.ITERATOR2)
-      case _ => getRawIdExpr(varName, rep)
-    }
+    val args = getRawIdExpr(varName, rep)
 
     outMethodHead.puts(s"ks_stream* $ioName;")
     outMethodBody.puts(s"/* Subtype with substream */")
@@ -411,7 +406,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def handleAssignmentRepeatEos(id: Identifier, expr: String): Unit = {
     val name = privateMemberName(RawIdentifier(id))
-    val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)})"
+    val ptr = getPtrSuffix(dataTypeLast)
+    val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)}$ptr)"
     outMethodBody.puts(s"data->$name->size++;")
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
@@ -431,12 +427,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val name = privateMemberName(RawIdentifier(id))
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    val ptr = getPtrSuffix(dataTypeLast)
     outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-expr) */")
-
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
-    outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}), data->$name->size);")
+    outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}$ptr), data->$name->size);")
     outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
@@ -454,6 +450,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val name = privateMemberName(RawIdentifier(id))
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
+    val ptr = getPtrSuffix(dataType)
     outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-until) */")
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
@@ -462,7 +459,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
-    outMethodBody.puts(s"${kaitaiType2NativeType(dataType)} ${translator.doName("_")} = {0};")
+    outMethodBody.puts(s"${kaitaiType2NativeType(dataType)}$ptr ${translator.doName("_")} = {0};")
     outMethodBody.puts(s"(void)${translator.doName("_")};")
     outMethodBody.puts(s"do")
     outMethodBody.puts("{")
@@ -472,7 +469,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def handleAssignmentRepeatUntil(id: Identifier, expr: String, isRaw: Boolean): Unit = {
     val name = privateMemberName(RawIdentifier(id))
     val nameTemp = translator.doName(Identifier.ITERATOR)
-    val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)})"
+    val ptr = getPtrSuffix(dataTypeLast)
+    val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)}$ptr)"
     outMethodBody.puts(s"data->$name->size++;")
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
@@ -552,12 +550,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case None => "data"
         }
         val typeName = makeName(t.classSpec.get.name)
-        if (isArray) {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, &data->$nameTarget));")
-        } else {
-          outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget));")
-        }
+        outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
+        outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget));")
         outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
         val parent = t.forcedParent match {
@@ -567,15 +561,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         }
         val typeName = makeName(t.classSpec.get.name)
         outMethodBody.puts(s"/* Subtype */")
-        if (isArray) {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, &data->$nameTarget));")
+        outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
+        if (importedTypes.contains(typeName)) {
+          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget));")
         } else {
-          outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-          if (importedTypes.contains(typeName)) {
-            outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget));")
-          } else {
-            outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_$typeName*)data->$nameTarget));")
-          }
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_$typeName*)data->$nameTarget));")
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
@@ -761,20 +751,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     lastWasInstanceValue = true
     val name = privateMemberName(instName)
     val ex = expression(value)
-    val op = dataType match {
-      case t: UserType =>
-        value match {
-          case expr.Subscript(_, _) => "&"
-          case expr.Attribute(_, attr) =>
-            attr.name match {
-              case "first" | "last" | "min" | "max" => "&"
-              case _ => ""
-            }
-          case _ => ""
-        }
-      case _ => ""
-    }
-    outMethodBody.puts(s"data->$name = $op$ex;")
+    outMethodBody.puts(s"data->$name = $ex;")
   }
 
   override def enumDeclaration(curClass: List[String], enumName: String, enumColl: Seq[(Long, EnumValueSpec)]): Unit = {
@@ -867,6 +844,19 @@ object CCompiler extends LanguageCompilerStatic
     config: RuntimeConfig
   ): LanguageCompiler = new CCompiler(tp, config)
 
+  def kaitaiType2NativeTypeArray(attrType: DataType): String = {
+    attrType match {
+      case t: UserType => s"ksx_array_${makeName(t.classSpec.get.name)}"
+      case t: EnumType => s"ksx_array_${makeName(t.enumSpec.get.name)}"
+      case _: StrType => s"ks_array_string"
+      case _: BytesType => s"ks_array_bytes"
+      case KaitaiStructType | CalcKaitaiStructType => s"ks_array_usertype_generic"
+      case AnyType => "ks_array_any"
+      case st: SwitchType => kaitaiType2NativeTypeArray(st.combinedType)
+      case _ => s"ks_array_${kaitaiType2NativeType(attrType)}"
+    }
+  }
+
   def kaitaiType2NativeType(attrType: DataType): String = {
     attrType match {
       case Int1Type(false) => "uint8_t"
@@ -898,16 +888,7 @@ object CCompiler extends LanguageCompilerStatic
       case t: UserType => "ksx_" + makeName(t.classSpec.get.name)
       case t: EnumType => "ksx_" + makeName(t.enumSpec.get.name)
 
-      case at: ArrayType => {
-        at.elType match {
-          case t: UserType => s"ksx_array_${makeName(t.classSpec.get.name)}"
-          case t: EnumType => s"ksx_array_${makeName(t.enumSpec.get.name)}"
-          case _: StrType => s"ks_array_string"
-          case _: BytesType => s"ks_array_bytes"
-          case KaitaiStructType | CalcKaitaiStructType => s"ks_array_usertype_generic"
-          case _ => s"ks_array_${kaitaiType2NativeType(at.elType)}"
-        }
-      }
+      case at: ArrayType => kaitaiType2NativeTypeArray(at.elType)
 
       case st: SwitchType => kaitaiType2NativeType(st.combinedType)
     }

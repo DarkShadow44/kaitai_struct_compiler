@@ -219,18 +219,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     {
       return s"${translate(value)}->_handle.stream"
     }
-    value match {
-      case expr.Subscript(_, _) =>
-        s"${translate(value)}.$attrName"
-      case expr.Name(name) =>
-        if (name.name == "_") {
-          s"${translate(value)}.$attrName"
-        } else {
-          s"${translate(value)}->$attrName"
-        }
-      case _ =>
-        s"${translate(value)}->$attrName"
-    }
+    s"${translate(value)}->$attrName"
   }
   override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
   override def doBoolLiteral(n: Boolean): String = if (n) "1" else "0"
