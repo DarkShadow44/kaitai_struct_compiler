@@ -311,7 +311,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         } else {
           s"8 - (${expression(rotValue)})"
         }
-        outMethodBody.puts(s"$normalIO.ProcessRotateLeft($srcExpr, $expr, 1)")
+        outMethodBody.puts(s"$srcExpr = ks_bytes_process_rotate_left($srcExpr, $expr);")
       case ProcessCustom(typename, args) =>
         val name2 = idToStr(varSrc)
         val procClass = typename.last
