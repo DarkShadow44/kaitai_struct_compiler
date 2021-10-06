@@ -328,7 +328,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val ioName = s"_io_$privateVarName"
 
     val args = rep match {
-      case RepeatUntil(_) => translator.doName(Identifier.ITERATOR2)
+      //case RepeatUntil(_) => translator.doName(Identifier.ITERATOR2)
       case _ => getRawIdExpr(varName, rep)
     }
 
