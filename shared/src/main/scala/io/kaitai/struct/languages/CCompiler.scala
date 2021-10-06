@@ -294,7 +294,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     val expr = proc match {
       case ProcessXor(xorValue) =>
-        outMethodBody.puts(s"$srcExpr = ks_bytes_process_xor($srcExpr, ${expression(xorValue)});")
+        val t = translator.detectType(xorValue)
+        t match {
+          case t1: BytesType =>
+            outMethodBody.puts(s"$srcExpr = ks_bytes_process_xor_bytes($srcExpr, ${expression(xorValue)});")
+          case Int1Type(_) =>
+            outMethodBody.puts(s"$srcExpr = ks_bytes_process_xor_int($srcExpr, ${expression(xorValue)}, 1);")
+          case _ =>
+            outMethodBody.puts("Unknown xor type: " + t.toString())
+        }
       case ProcessZlib =>
         outMethodBody.puts(s"$normalIO.ProcessZlib($srcExpr)")
       case ProcessRotate(isLeft, rotValue) =>
