@@ -927,12 +927,12 @@ object CCompiler extends LanguageCompilerStatic
       case FloatMultiType(Width4, _) => "KS_TYPE_ARRAY_FLOAT, 4"
       case FloatMultiType(Width8, _) => "KS_TYPE_ARRAY_FLOAT, 8"
 
-      case _: StrType => "KS_TYPE_ARRAY_STRING, sizeof(ks_string)"
+      case _: StrType => "KS_TYPE_ARRAY_STRING, sizeof(ks_string*)"
 
       case BitsType(_, _) => "KS_TYPE_ARRAY_UINT, 8"
-      case _: BytesType => s"KS_TYPE_ARRAY_BYTES, sizeof(ks_bytes)"
+      case _: BytesType => s"KS_TYPE_ARRAY_BYTES, sizeof(ks_bytes*)"
 
-      case t: UserType => s"KS_TYPE_ARRAY_USERTYPE, sizeof(ksx_${makeName(t.classSpec.get.name)})"
+      case t: UserType => s"KS_TYPE_ARRAY_USERTYPE, sizeof(ksx_${makeName(t.classSpec.get.name)}*)"
       case t: EnumType => getKaitaiTypeEnumAndSize(t.basedOn)
 
       case _ => "KS_TYPE_UNKNOWN, 0"
