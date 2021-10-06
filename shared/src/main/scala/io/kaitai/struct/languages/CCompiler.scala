@@ -121,6 +121,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrc.puts("{")
       outSrc.inc
       outSrc.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
+      outSrc.puts("if(*stream->err != 0) return *stream->err;")
+      outSrc.puts(s"ksx_read_${className}_instances(stream, data, stream, data);")
       outSrc.puts("return *stream->err;")
       outSrc.dec
       outSrc.puts("}")
@@ -225,7 +227,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (outMethodHead.result != "") {
         outSrc.puts
     }
-    if (!instance) {
+    if (!instance && outHdrStructs.length > 1) {
       outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances(root_stream, root_data, stream, data));")
     }
     outSrc.add(outMethodBody)
