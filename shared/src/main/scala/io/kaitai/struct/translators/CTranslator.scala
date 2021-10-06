@@ -52,6 +52,9 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     '\b' -> "\\b"
   )
 
+  override def strLiteralUnicode(code: Char): String =
+    code.toString().getBytes("UTF-8").map(c => s"\\x" + Integer.toHexString(c & 0xff)).mkString("")
+
   override def doIntLiteral(n: BigInt): String = {
     if (n == -9223372036854775808L) {
       return s"(${n + 1}LL - 1)"
