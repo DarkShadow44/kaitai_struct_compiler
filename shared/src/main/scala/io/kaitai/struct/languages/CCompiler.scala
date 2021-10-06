@@ -825,6 +825,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     err: KSError,
     errArgs: List[Ast.expr]
   ): Unit = {
+    val typeStr = kaitaiType2NativeType(attrType)
+    val ptr = getPtrSuffix(attrType)
+    val name = privateMemberName(attrId)
+    outMethodBody.puts("{")
+    outMethodBody.inc
+    outMethodBody.puts(s"$typeStr$ptr _temp_ = data->$name;")
+    outMethodBody.puts(s"(void)_temp_;")
     val errArgsStr = errArgs.map(translator.translate).mkString(", ")
     outMethodBody.puts(s"if (!(${translator.translate(checkExpr)}))")
     outMethodBody.puts("{")
@@ -832,6 +839,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     //outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
     outMethodBody.puts(s"*stream->err = 1;")
     outMethodBody.puts(s"return;")
+    outMethodBody.dec
+    outMethodBody.puts("}")
     outMethodBody.dec
     outMethodBody.puts("}")
   }
