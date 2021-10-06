@@ -6,6 +6,7 @@ import io.kaitai.struct.datatype.DataType._
 import io.kaitai.struct.exprlang.Ast
 import io.kaitai.struct.exprlang.Ast._
 import io.kaitai.struct.format.Identifier
+import io.kaitai.struct.format.SpecialIdentifier
 import io.kaitai.struct.languages.CCompiler
 import io.kaitai.struct.languages.components.CppImportList
 
@@ -218,6 +219,12 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     value match {
       case expr.Subscript(_, _) =>
         s"${translate(value)}.$attrName"
+      case expr.Name(name) =>
+        if (name.name == "_") {
+          s"${translate(value)}.$attrName"
+        } else {
+          s"${translate(value)}->$attrName"
+        }
       case _ =>
         s"${translate(value)}->$attrName"
     }
