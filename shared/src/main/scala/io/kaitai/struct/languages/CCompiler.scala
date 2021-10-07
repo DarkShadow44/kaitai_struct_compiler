@@ -464,6 +464,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
+    outMethodBody.puts("i = 0;")
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)}$ptr ${translator.doName("_")} = {0};")
     outMethodBody.puts(s"(void)${translator.doName("_")};")
     outMethodBody.puts(s"do")
