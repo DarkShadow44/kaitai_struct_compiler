@@ -248,13 +248,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outMethodHead.puts(s"int64_t $index;")
       outMethodHasI = false
     }
-    if (instance)
-    {
-      outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_instances_children_x(root_stream, root_data, stream, data));")
-    }
     outSrc.add(outMethodHead)
     if (outMethodHead.result != "") {
         outSrc.puts
+    }
+    if (instance)
+    {
+      // TODO What if children depend on their parent?
+      outSrc.puts(s"   CHECKV(ksx_read_${currentClassName}_instances_children_x(root_stream, root_data, stream, data));")
     }
     outSrc.add(outMethodBody)
     outSrc.puts
