@@ -561,7 +561,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         } else {
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget));")
         }
-        outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
+        // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
         val parent = t.forcedParent match {
           case Some(USER_TYPE_NO_PARENT) => "0"
