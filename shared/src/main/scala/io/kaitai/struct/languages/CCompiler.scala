@@ -33,7 +33,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outSrcHeader = new StringLanguageOutputWriter(indent)
   val outHdrHeader = new StringLanguageOutputWriter(indent)
   val outSrcDefs = new StringLanguageOutputWriter(indent)
-  val outSrc = new StringLanguageOutputWriter(indent)
+  val outSrcMain = new StringLanguageOutputWriter(indent)
+  val outSrcInstances = new StringLanguageOutputWriter(indent)
+  val outSrcInstancesChildren = new StringLanguageOutputWriter(indent)
   val outHdr = new StringLanguageOutputWriter(indent)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrArrays = new StringLanguageOutputWriter(indent)
@@ -49,7 +51,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
     Map(
-      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrc.result),
+      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrcMain.result + outSrcInstances.result + outSrcInstancesChildren.result),
       outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdr.result + outHdrArrays.result + outHdrFinish.result)
     )
   }
@@ -89,6 +91,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outSrcDefs.puts
     outHdrDefs.puts
+    outSrcInstances.puts
+    outSrcInstancesChildren.puts
 
     outHdrFinish.puts
     outHdrFinish.puts("#endif")
@@ -119,16 +123,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (outHdrStructs.length == 1) {
       outHdr.puts
       outHdr.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data);")
-      outSrc.puts
-      outSrc.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_$className* data)")
-      outSrc.puts("{")
-      outSrc.inc
-      outSrc.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
-      outSrc.puts("if(*stream->err != 0) return *stream->err;")
-      outSrc.puts(s"ksx_read_${className}_instances(stream, data, stream, data);")
-      outSrc.puts("return *stream->err;")
-      outSrc.dec
-      outSrc.puts("}")
+      outSrcMain.puts
+      outSrcMain.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_$className* data)")
+      outSrcMain.puts("{")
+      outSrcMain.inc
+      outSrcMain.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
+      outSrcMain.puts("if(*stream->err != 0) return *stream->err;")
+      outSrcMain.puts(s"ksx_read_${className}_instances(stream, data, stream, data);")
+      outSrcMain.puts("return *stream->err;")
+      outSrcMain.dec
+      outSrcMain.puts("}")
     } else {
       outHdrArrays.puts
       outHdrArrays.puts(s"typedef struct ksx_array_${className}_")
@@ -176,22 +180,22 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val parentName = kaitaiType2NativeType(parentType)
     val outStruct = outHdrStructs.last
     outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, void* parent_data, ks_stream* stream, ksx_$className* data);");
-    outSrc.puts
-    outSrc.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, void* parent_data, ks_stream* stream, ksx_$className* data)")
-    outSrc.puts("{")
-    outSrc.inc
-    outSrc.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
+    outSrcMain.puts
+    outSrcMain.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_$rootName* root_data, void* parent_data, ks_stream* stream, ksx_$className* data)")
+    outSrcMain.puts("{")
+    outSrcMain.inc
+    outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
     outStruct.puts(s"$parentName* _parent;")
-    outSrc.puts(s"data->_parent = ($parentName*)parent_data;")
+    outSrcMain.puts(s"data->_parent = ($parentName*)parent_data;")
   }
 
   override def classConstructorFooter: Unit = {
-    outSrc.dec
-    outSrc.puts("}")
+    outSrcMain.dec
+    outSrcMain.puts("}")
   }
 
   override def runRead(name: List[String]): Unit = {
-    outSrc.puts(s"CHECKV(ksx_read_${currentClassName}_x(root_stream, root_data, stream, data));");
+    outSrcMain.puts(s"CHECKV(ksx_read_${currentClassName}_x(root_stream, root_data, stream, data));");
   }
 
   override def runReadCalc(): Unit = {
@@ -224,8 +228,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case None => "x"
     }
     outSrcDefs.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data);");
-    outSrc.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data)");
-    outSrc.puts("{")
+    outSrcMain.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data)");
+    outSrcMain.puts("{")
     outMethodHead.inc
     outMethodBody.inc
 
@@ -237,6 +241,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   def makeFooter(instance: Boolean) : Unit = {
+    val outSrc = if (instance) outSrcInstances else outSrcMain
     if (outMethodHasI)
     {
       val index = translator.doName(Identifier.INDEX)
@@ -259,17 +264,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     if (!instance)
     {
-      outSrc.puts
+      outSrcInstancesChildren.puts
       if (outMethodInstanceHasI)
       {
         val index = translator.doName(Identifier.INDEX)
         outMethodHeadInstance.puts(s"int64_t $index;")
         outMethodInstanceHasI = false
       }
-      outSrc.add(outMethodHeadInstance)
-      outSrc.add(outMethodBodyInstance)
-      outSrc.dec
-      outSrc.puts("}")
+      outSrcInstancesChildren.add(outMethodHeadInstance)
+      outSrcInstancesChildren.add(outMethodBodyInstance)
+      outSrcInstancesChildren.dec
+      outSrcInstancesChildren.puts("}")
     }
     outMethodHeadInstance = new StringLanguageOutputWriter(indent)
     outMethodBodyInstance = new StringLanguageOutputWriter(indent)
@@ -869,8 +874,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val className = makeName(classNameList)
     currentClassName = className
     outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data);")
-    outSrc.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data)")
-    outSrc.puts("{")
+    outSrcInstances.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data)")
+    outSrcInstances.puts("{")
     outMethodHead.inc
     outMethodBody.inc
   }
