@@ -34,13 +34,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outSrcMain = new StringLanguageOutputWriter(indent)
   val outSrcInstances = new StringLanguageOutputWriter(indent)
   val outSrcInstancesFill = new StringLanguageOutputWriter(indent)
+  val outSrcInstancesFillArray : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
   val outHdr = new StringLanguageOutputWriter(indent)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrArrays = new StringLanguageOutputWriter(indent)
-  val outHdrInternalStruct = new StringLanguageOutputWriter(indent)
+  val outHdrInternalStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
   val outHdrDefs = new StringLanguageOutputWriter(indent)
   val outHdrFinish = new StringLanguageOutputWriter(indent)
   val outSrcInstancesGet = new StringLanguageOutputWriter(indent)
+  val outSrcInternalStruct =  new StringLanguageOutputWriter(indent)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
   val importedTypes : ListBuffer[String] = ListBuffer()
   var outMethodHasI = false
@@ -50,7 +52,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
     Map(
-      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outHdrInternalStruct.result + outSrcMain.result + outSrcInstances.result + outSrcInstancesGet.result + outSrcInstancesFill.result),
+      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrcInternalStruct.result + outSrcMain.result + outSrcInstances.result + outSrcInstancesGet.result + outSrcInstancesFill.result),
       outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdr.result + outHdrArrays.result + outHdrFinish.result)
     )
   }
@@ -94,8 +96,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outHdrFinish.puts
     outHdrFinish.puts("#endif")
-
-    outHdrInternalStruct.puts
   }
 
   override def fileFooter(topClassName: String): Unit = {
@@ -119,7 +119,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def classHeader(name: List[String]): Unit = {
     val className = makeName(name)
     outHdrStructs.append(new StringLanguageOutputWriter(indent))
+    outHdrInternalStructs.append(new StringLanguageOutputWriter(indent))
+    outSrcInstancesFillArray.append(new StringLanguageOutputWriter(indent))
     val outStruct = outHdrStructs.last
+    val outInternalStruct = outHdrInternalStructs.last
+    val outInstancesFill = outSrcInstancesFillArray.last
     if (outHdrStructs.length == 1) {
       outHdr.puts
       outHdr.puts(s"ksx_${className}* ksx_read_${className}_from_stream(ks_stream* stream, int* error);")
@@ -127,7 +131,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrcMain.puts(s"ksx_${className}* ksx_read_${className}_from_stream(ks_stream* stream, int* error)")
       outSrcMain.puts("{")
       outSrcMain.inc
-       outSrcMain.puts(s"ksx_${className}_internal* data = calloc(1, sizeof(ksx_${className}_internal));");
+      outSrcMain.puts(s"ksx_${className}_internal* data = calloc(1, sizeof(ksx_${className}_internal));");
       outSrcMain.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
       outSrcMain.puts("if (error) *error = *stream->err;")
       outSrcMain.puts(s"return (ksx_${className}*)data;")
@@ -152,11 +156,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outStruct.puts("ks_handle _handle;")
     outHdrDefs.puts(s"typedef struct ksx_${className}_ ksx_${className};")
 
-    outHdrInternalStruct.puts(s"typedef struct ksx_${className}_internal")
-    outHdrInternalStruct.puts("{")
-    outHdrInternalStruct.inc
-    outHdrInternalStruct.puts(s"ksx_${className} data;")
+    outInternalStruct.puts(s"typedef struct ksx_${className}_internal")
+    outInternalStruct.puts("{")
+    outInternalStruct.inc
+    outInternalStruct.puts(s"ksx_${className} data;")
     outSrcDefs.puts(s"typedef struct ksx_${className}_internal ksx_${className}_internal;");
+
+    outSrcDefs.puts(s"static void ksx_fill_${className}_instances(ksx_${className}_internal* data);")
+    outInstancesFill.puts(s"static void ksx_fill_${className}_instances(ksx_${className}_internal* data)")
+    outInstancesFill.puts("{")
+    outInstancesFill.inc
 
     typeProvider.nowClass.meta.endian match {
       case Some(_: CalcEndian) | Some(InheritedEndian) =>
@@ -169,25 +178,32 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def classFooter(name: List[String]): Unit = {
     val className = makeName(name)
     val outStruct = outHdrStructs.last
+    currentClassNames.remove(currentClassNames.length -1)
     outHdrStructs.remove(outHdrStructs.length -1)
+    val outInternalStruct = outHdrInternalStructs.last
+    outHdrInternalStructs.remove(outHdrInternalStructs.length - 1)
+    val outInstancesFill = outSrcInstancesFillArray.last
+    outSrcInstancesFillArray.remove(outSrcInstancesFillArray.length - 1)
     outStruct.dec
     outStruct.puts(s"} ksx_$className;")
-    outHdrInternalStruct.dec
-    outHdrInternalStruct.puts(s"} ksx_${className}_internal;")
+    outInternalStruct.dec
+    outInternalStruct.puts(s"} ksx_${className}_internal;")
     outHdr.add(outStruct)
-    outSrcInstancesFill.dec
-    outSrcInstancesFill.puts("}")
+    outSrcInternalStruct.add(outInternalStruct)
+    outInstancesFill.dec
+    outInstancesFill.puts("}")
+    outSrcInstancesFill.add(outInstancesFill)
   }
 
-  var currentClassName = ""
+  var currentClassNames : ListBuffer[String] = ListBuffer()
   var currentRootName = ""
 
   override def classConstructorHeader(name: List[String], parentType: DataType, rootClassName: List[String], isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
     val className = makeName(name)
-    currentClassName = className
+    currentClassNames.append(className)
     val rootName = makeName(rootClassName)
     currentRootName = rootName
-    val parentName = kaitaiType2NativeType(parentType)
+    val parentName = kaitaiType2NativeTypeNonInternal(parentType)
     val outStruct = outHdrStructs.last
     outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}_internal* root_data, void* parent_data, ks_stream* stream, ksx_${className}_internal* data);");
     outSrcMain.puts
@@ -199,10 +215,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcMain.puts(s"data->data._parent = ($parentName*)parent_data;")
     outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
 
-    outSrcDefs.puts(s"static void ksx_fill_${className}_instances(ksx_${className}_internal* data);")
-    outSrcInstancesFill.puts(s"static void ksx_fill_${className}_instances(ksx_${className}_internal* data)")
-    outSrcInstancesFill.puts("{")
-    outSrcInstancesFill.inc
     outMethodHead.inc
     outMethodBody.inc
   }
@@ -213,18 +225,18 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def runRead(name: List[String]): Unit = {
-    outSrcMain.puts(s"CHECKV(ksx_read_${currentClassName}_x(root_stream, root_data, stream, data));");
+    outSrcMain.puts(s"CHECKV(ksx_read_${currentClassNames.last}_x(root_stream, root_data, stream, data));");
   }
 
   override def runReadCalc(): Unit = {
     outMethodBody.puts
     outMethodBody.puts(s"if (data->data.${privateMemberName(EndianIdentifier)}) {")
     outMethodBody.inc
-    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_le(root_stream, root_data, stream, data));");
+    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassNames.last}_le(root_stream, root_data, stream, data));");
     outMethodBody.dec
     outMethodBody.puts("} else {")
     outMethodBody.inc
-    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_be(root_stream, root_data, stream, data));");
+    outMethodBody.puts(s"CHECKV(ksx_read_${currentClassNames.last}_be(root_stream, root_data, stream, data));");
     outMethodBody.dec
     outMethodBody.puts("}")
   }
@@ -234,6 +246,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case Some(e) => e.toSuffix
       case None => "x"
     }
+    val currentClassName = currentClassNames.last
     outSrcDefs.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_${currentRootName}_internal* root_data, ks_stream* stream, ksx_${currentClassName}_internal* data);");
     outSrcMain.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_${currentRootName}_internal* root_data, ks_stream* stream, ksx_${currentClassName}_internal* data)");
     outSrcMain.puts("{")
@@ -277,6 +290,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean, isInstance: Boolean): Unit = {
     val outStruct = outHdrStructs.last
+    val outInternalStruct = outHdrInternalStructs.last
+    val outInstancesFill = outSrcInstancesFillArray.last
     val name = idToStr(attrName)
     if (name == "_parent" || name == "_root")
     {
@@ -293,8 +308,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (isNullable) {
       outStruct.puts(s"ks_bool ${nullFlagForName(attrName)};")
     }
-    val typeStr = kaitaiType2NativeType(attrType)
-    outStruct.puts(s"$typeStr$suffix ${privateMemberName(attrName)};")
+    val currentClassName = currentClassNames.last
+    val typeStr = kaitaiType2NativeType(attrType) + getPtrSuffix(attrType)
+    outStruct.puts(s"${kaitaiType2NativeTypeNonInternal(attrType)}$suffix ${privateMemberName(attrName)};")
 
     outSrcInstancesGet.puts(s"static ${typeStr} ksx_get_${currentClassName}_${name}(ksx_${currentClassName}_internal* data)")
     outSrcInstancesGet.puts("{")
@@ -302,13 +318,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (isInstance) {
       outSrcInstancesGet.puts(s"ksx_read_${currentClassName}_instance_${name}(ks_stream_get_root(data->data._handle.stream), data->data._handle.stream, data);")
     }
-    outSrcInstancesGet.puts(s"return data->data.${name};")
+    attrType match {
+      case t: UserType =>
+        val cast = kaitaiType2NativeType(t)
+        outSrcInstancesGet.puts(s"return (${cast}*)data->data.${name};")
+      case _ =>
+        outSrcInstancesGet.puts(s"return data->data.${name};")
+    }
     outSrcInstancesGet.dec
     outSrcInstancesGet.puts("}")
     outSrcInstancesGet.puts
 
-    outHdrInternalStruct.puts(s"${typeStr} (*${funcForInstName(attrName)})(ksx_${currentClassName}_internal* data);")
-    outSrcInstancesFill.puts(s"data->${funcForInstName(attrName)} = ksx_get_${currentClassName}_${name};")
+    outInternalStruct.puts(s"${typeStr} (*${funcForInstName(attrName)})(ksx_${currentClassName}_internal* data);")
+    outInstancesFill.puts(s"data->${funcForInstName(attrName)} = ksx_get_${currentClassName}_${name};")
   }
 
   override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
@@ -636,10 +658,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val typeName = makeName(t.classSpec.get.name)
         if (importedTypes.contains(typeName)) {
           outMethodBody.puts(s"data->data.$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->data.$nameTarget));")
+          outMethodBody.puts(s"CHECKV(data->data.$nameTarget = ksx_read_${typeName}_from_stream(_io_$name, 0);")
         } else {
           outMethodBody.puts(s"data->data.$nameTarget = calloc(1, sizeof(ksx_${typeName}_internal));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->data.$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_${typeName}_internal*)data->data.$nameTarget));")
         }
         // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
@@ -652,10 +674,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"/* Subtype */")
         if (importedTypes.contains(typeName)) {
           outMethodBody.puts(s"data->data.$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->data.$nameTarget));")
+          outMethodBody.puts(s"CHECKV(data->data.$nameTarget = ksx_read_${typeName}_from_stream($io_new, 0));")
         } else {
           outMethodBody.puts(s"data->data.$nameTarget = calloc(1, sizeof(ksx_${typeName}_internal));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_$typeName*)data->data.$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}_internal*)data->data.$nameTarget));")
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
@@ -867,7 +889,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   def funcForInstName(ksName: Identifier) = s"_get_${idToStr(ksName)}"
 
   override def instanceDeclaration(attrName: InstanceIdentifier, attrType: DataType, isNullable: Boolean): Unit = {
-    outHdrInternalStruct.puts(s"ks_bool ${flagForInstName(attrName)};")
+    val outInternalStruct = outHdrInternalStructs.last
+    outInternalStruct.puts(s"ks_bool ${flagForInstName(attrName)};")
     attributeDeclaration(attrName, attrType, isNullable, true)
   }
 
@@ -1039,12 +1062,26 @@ object CCompiler extends LanguageCompilerStatic
       case KaitaiStructType | CalcKaitaiStructType => kstructName
       case KaitaiStreamType | OwnedKaitaiStreamType => kstreamName
 
-      case t: UserType => "ksx_" + makeName(t.classSpec.get.name) + "_internal"
+      case t: UserType =>
+        if (t.isOpaque) {
+          "ksx_" + makeName(t.classSpec.get.name)
+        } else {
+          "ksx_" + makeName(t.classSpec.get.name) + "_internal"
+        }
       case t: EnumType => "ksx_" + makeName(t.enumSpec.get.name)
 
       case at: ArrayType => kaitaiType2NativeTypeArray(at.elType)
 
       case st: SwitchType => kaitaiType2NativeType(st.combinedType)
+    }
+  }
+
+  def kaitaiType2NativeTypeNonInternal(attrType: DataType): String = {
+    attrType match {
+      case t: UserType => "ksx_" + makeName(t.classSpec.get.name)
+
+      case st: SwitchType => kaitaiType2NativeTypeNonInternal(st.combinedType)
+      case _ => kaitaiType2NativeType(attrType)
     }
   }
 
