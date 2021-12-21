@@ -28,30 +28,29 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   var outMethodHead = new StringLanguageOutputWriter(indent)
   var outMethodBody = new StringLanguageOutputWriter(indent)
-  var outMethodHeadInstance = new StringLanguageOutputWriter(indent)
-  var outMethodBodyInstance = new StringLanguageOutputWriter(indent)
   val outSrcHeader = new StringLanguageOutputWriter(indent)
   val outHdrHeader = new StringLanguageOutputWriter(indent)
   val outSrcDefs = new StringLanguageOutputWriter(indent)
   val outSrcMain = new StringLanguageOutputWriter(indent)
   val outSrcInstances = new StringLanguageOutputWriter(indent)
-  val outSrcInstancesChildren = new StringLanguageOutputWriter(indent)
+  val outSrcInstancesFill = new StringLanguageOutputWriter(indent)
   val outHdr = new StringLanguageOutputWriter(indent)
   val outHdrEnums = new StringLanguageOutputWriter(indent)
   val outHdrArrays = new StringLanguageOutputWriter(indent)
+  val outHdrInternalStruct = new StringLanguageOutputWriter(indent)
   val outHdrDefs = new StringLanguageOutputWriter(indent)
   val outHdrFinish = new StringLanguageOutputWriter(indent)
+  val outSrcInstancesGet = new StringLanguageOutputWriter(indent)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
   val importedTypes : ListBuffer[String] = ListBuffer()
   var outMethodHasI = false
-  var outMethodInstanceHasI = false
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
 
   override def results(topClass: ClassSpec): Map[String, String] = {
     val className = topClass.nameAsStr
     Map(
-      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outSrcMain.result + outSrcInstances.result + outSrcInstancesChildren.result),
+      outFileNameSource(className) -> (outSrcHeader.result + importListSrc.result + outSrcDefs.result + outHdrInternalStruct.result + outSrcMain.result + outSrcInstances.result + outSrcInstancesGet.result + outSrcInstancesFill.result),
       outFileNameHeader(className) -> (outHdrHeader.result + importListHdr.result + outHdrDefs.result + outHdrEnums.result + outHdr.result + outHdrArrays.result + outHdrFinish.result)
     )
   }
@@ -92,10 +91,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcDefs.puts
     outHdrDefs.puts
     outSrcInstances.puts
-    outSrcInstancesChildren.puts
+    outSrcInstancesFill.puts
 
     outHdrFinish.puts
     outHdrFinish.puts("#endif")
+
+    outHdrInternalStruct.puts
   }
 
   override def fileFooter(topClassName: String): Unit = {
@@ -129,7 +130,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrcMain.inc
       outSrcMain.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
       outSrcMain.puts("if(*stream->err != 0) return *stream->err;")
-      outSrcMain.puts(s"ksx_read_${className}_instances(stream, data, stream, data);")
       outSrcMain.puts("return *stream->err;")
       outSrcMain.dec
       outSrcMain.puts("}")
@@ -152,6 +152,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outStruct.puts("ks_handle _handle;")
     outHdrDefs.puts(s"typedef struct ksx_${className}_ ksx_${className};")
 
+    outHdrInternalStruct.puts(s"typedef struct ksx_${className}_internal")
+    outHdrInternalStruct.puts("{")
+    outHdrInternalStruct.inc
+    outHdrInternalStruct.puts(s"ksx_${className} data;")
+
     typeProvider.nowClass.meta.endian match {
       case Some(_: CalcEndian) | Some(InheritedEndian) =>
         outStruct.puts(s"ks_bool ${privateMemberName(EndianIdentifier)};")
@@ -166,7 +171,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrStructs.remove(outHdrStructs.length -1)
     outStruct.dec
     outStruct.puts(s"} ksx_$className;")
+    outHdrInternalStruct.dec
+    outHdrInternalStruct.puts(s"} ksx_${className}_internal;")
     outHdr.add(outStruct)
+    outSrcInstancesFill.dec
+    outSrcInstancesFill.puts("}")
   }
 
   var currentClassName = ""
@@ -187,6 +196,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_$className)));")
     outStruct.puts(s"$parentName* _parent;")
     outSrcMain.puts(s"data->_parent = ($parentName*)parent_data;")
+    outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
+
+    outSrcDefs.puts(s"static void ksx_fill_${className}_instances(ksx_$className* data);")
+    outSrcInstancesFill.puts(s"static void ksx_fill_${className}_instances(ksx_$className* data)")
+    outSrcInstancesFill.puts("{")
+    outSrcInstancesFill.inc
+    outSrcInstancesFill.puts(s"ksx_${className}_internal* getters;");
+    outSrcInstancesFill.puts(s"data->_handle.getters = calloc(1, sizeof(ksx_${className}_internal));")
+    outSrcInstancesFill.puts(s"getters = data->_handle.getters;")
+    outMethodHead.inc
+    outMethodBody.inc
   }
 
   override def classConstructorFooter: Unit = {
@@ -209,17 +229,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"CHECKV(ksx_read_${currentClassName}_be(root_stream, root_data, stream, data));");
     outMethodBody.dec
     outMethodBody.puts("}")
-
-    outMethodBodyInstance.puts
-    outMethodBodyInstance.puts(s"if (data->${privateMemberName(EndianIdentifier)}) {")
-    outMethodBodyInstance.inc
-    outMethodBodyInstance.puts(s"CHECKV(ksx_read_${currentClassName}_instances_children_le(root_stream, root_data, stream, data));");
-    outMethodBodyInstance.dec
-    outMethodBodyInstance.puts("} else {")
-    outMethodBodyInstance.inc
-    outMethodBodyInstance.puts(s"CHECKV(ksx_read_${currentClassName}_instances_children_be(root_stream, root_data, stream, data));");
-    outMethodBodyInstance.dec
-    outMethodBodyInstance.puts("}")
   }
 
   override def readHeader(endian: Option[FixedEndian], isEmpty: Boolean) = {
@@ -230,14 +239,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcDefs.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data);");
     outSrcMain.puts(s"static void ksx_read_${currentClassName}_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data)");
     outSrcMain.puts("{")
-    outMethodHead.inc
-    outMethodBody.inc
-
-    outSrcDefs.puts(s"static void ksx_read_${currentClassName}_instances_children_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data);")
-    outMethodHeadInstance.puts(s"static void ksx_read_${currentClassName}_instances_children_$suffix(ks_stream* root_stream, ksx_$currentRootName* root_data, ks_stream* stream, ksx_$currentClassName* data)")
-    outMethodHeadInstance.puts("{")
-    outMethodHeadInstance.inc
-    outMethodBodyInstance.inc
   }
 
   def makeFooter(instance: Boolean) : Unit = {
@@ -252,33 +253,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (outMethodHead.result != "") {
         outSrc.puts
     }
-    if (instance)
-    {
-      // TODO What if children depend on their parent?
-      outSrc.puts(s"   CHECKV(ksx_read_${currentClassName}_instances_children_x(root_stream, root_data, stream, data));")
-    }
     outSrc.add(outMethodBody)
     outSrc.puts
     outSrc.puts("}")
     outMethodHead = new StringLanguageOutputWriter(indent)
     outMethodBody = new StringLanguageOutputWriter(indent)
-
-    if (!instance)
-    {
-      outSrcInstancesChildren.puts
-      if (outMethodInstanceHasI)
-      {
-        val index = translator.doName(Identifier.INDEX)
-        outMethodHeadInstance.puts(s"int64_t $index;")
-        outMethodInstanceHasI = false
-      }
-      outSrcInstancesChildren.add(outMethodHeadInstance)
-      outSrcInstancesChildren.add(outMethodBodyInstance)
-      outSrcInstancesChildren.dec
-      outSrcInstancesChildren.puts("}")
-    }
-    outMethodHeadInstance = new StringLanguageOutputWriter(indent)
-    outMethodBodyInstance = new StringLanguageOutputWriter(indent)
   }
 
   override def readFooter(): Unit = makeFooter(false)
@@ -295,8 +274,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
+    attributeDeclaration(attrName, attrType, isNullable, false)
+  }
+
+  def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean, isInstance: Boolean): Unit = {
     val outStruct = outHdrStructs.last
-    if (idToStr(attrName) == "_parent" || idToStr(attrName) == "_root")
+    val name = idToStr(attrName)
+    if (name == "_parent" || name == "_root")
     {
       return
     }
@@ -311,7 +295,22 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (isNullable) {
       outStruct.puts(s"ks_bool ${nullFlagForName(attrName)};")
     }
-    outStruct.puts(s"${kaitaiType2NativeType(attrType)}$suffix ${privateMemberName(attrName)};")
+    val typeStr = kaitaiType2NativeType(attrType)
+    outStruct.puts(s"$typeStr$suffix ${privateMemberName(attrName)};")
+
+    outSrcInstancesGet.puts(s"static ${typeStr} ksx_get_${currentClassName}_${name}(ksx_$currentClassName* data)")
+    outSrcInstancesGet.puts("{")
+    outSrcInstancesGet.inc
+    if (isInstance) {
+      outSrcInstancesGet.puts(s"ksx_read_${currentClassName}_instance_${name}(ks_stream_get_root(data->_handle.stream), data->_handle.stream, data);")
+    }
+    outSrcInstancesGet.puts(s"return data->${name};")
+    outSrcInstancesGet.dec
+    outSrcInstancesGet.puts("}")
+    outSrcInstancesGet.puts
+
+    outHdrInternalStruct.puts(s"${typeStr} (*${funcForInstName(attrName)})(ksx_${currentClassName}* data);")
+    outSrcInstancesFill.puts(s"getters->${funcForInstName(attrName)} = ksx_get_${currentClassName}_${name};")
   }
 
   override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
@@ -410,7 +409,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def instanceClear(instName: InstanceIdentifier): Unit = {}
 
-  override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {}
+  override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {
+    outMethodBody.puts(s"getters->${flagForInstName(instName)} = 1;")
+  }
 
   override def condIfHeader(expr: expr): Unit = {
     outMethodBody.puts(s"if (${expression(expr)}) {")
@@ -441,17 +442,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case _ => false
     }
     if (repeatWasUsertype) {
-      outMethodInstanceHasI = true
-      outMethodBodyInstance.puts(s"for (i = 0; i < data->$name->size; i++)")
-      outMethodBodyInstance.puts("{")
-      outMethodBodyInstance.inc
+      outMethodBody.puts(s"for (i = 0; i < data->$name->size; i++)")
+      outMethodBody.puts("{")
+      outMethodBody.inc
     }
   }
 
   def instanceRepeatEnd() : Unit = {
     if (repeatWasUsertype) {
-      outMethodBodyInstance.dec
-      outMethodBodyInstance.puts("}")
+      outMethodBody.dec
+      outMethodBody.puts("}")
     }
     repeatWasUsertype = false
   }
@@ -641,7 +641,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget));")
         } else {
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget));")
-          outMethodBodyInstance.puts(s"CHECKV(ksx_read_${typeName}_instances(root_stream, root_data, stream, (ksx_$typeName*)data->$nameTarget));")
         }
         // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
@@ -657,7 +656,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget));")
         } else {
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_$typeName*)data->$nameTarget));")
-          outMethodBodyInstance.puts(s"CHECKV(ksx_read_${typeName}_instances(root_stream, root_data, stream, (ksx_$typeName*)data->$nameTarget));")
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
@@ -740,7 +738,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def switchStart(id: Identifier, on: Ast.expr): Unit = {
     outMethodBody.puts(s"switch (${expression(on)}) {")
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts(s"switch (${expression(on)}) {")
+      outMethodBody.puts(s"switch (${expression(on)}) {")
     }
   }
 
@@ -751,8 +749,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
     switchOverrideStart()
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts(s"case ${expression(condition)}: {")
-      outMethodBodyInstance.inc
+      outMethodBody.puts(s"case ${expression(condition)}: {")
+      outMethodBody.inc
     }
   }
 
@@ -762,9 +760,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.dec
     outMethodBody.puts("}")
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts("break;")
-      outMethodBodyInstance.dec
-      outMethodBodyInstance.puts("}")
+      outMethodBody.puts("break;")
+      outMethodBody.dec
+      outMethodBody.puts("}")
     }
   }
 
@@ -773,15 +771,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
     switchOverrideStart()
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts("default: {")
-      outMethodBodyInstance.inc
+      outMethodBody.puts("default: {")
+      outMethodBody.inc
     }
   }
 
   override def switchEnd(): Unit = {
     outMethodBody.puts("}")
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts("}")
+      outMethodBody.puts("}")
     }
   }
 
@@ -794,9 +792,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(onType)} ${expression(NAME_SWITCH_ON)} = ${expression(on)};")
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts("{")
-      outMethodBodyInstance.inc
-      outMethodBodyInstance.puts(s"${kaitaiType2NativeType(onType)} ${expression(NAME_SWITCH_ON)} = ${expression(on)};")
+      outMethodBody.puts("{")
+      outMethodBody.inc
+      outMethodBody.puts(s"${kaitaiType2NativeType(onType)} ${expression(NAME_SWITCH_ON)} = ${expression(on)};")
     }
   }
 
@@ -815,9 +813,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
     switchOverrideStart()
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts(s"if (${switchCmpExpr(condition)})")
-      outMethodBodyInstance.puts("{")
-      outMethodBodyInstance.inc
+      outMethodBody.puts(s"if (${switchCmpExpr(condition)})")
+      outMethodBody.puts("{")
+      outMethodBody.inc
     }
   }
 
@@ -827,9 +825,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
     switchOverrideStart()
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts(s"else if (${switchCmpExpr(condition)})")
-      outMethodBodyInstance.puts("{")
-      outMethodBodyInstance.inc
+      outMethodBody.puts(s"else if (${switchCmpExpr(condition)})")
+      outMethodBody.puts("{")
+      outMethodBody.inc
     }
   }
 
@@ -838,8 +836,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.dec
     outMethodBody.puts("}")
     if (repeatWasUsertype) {
-      outMethodBodyInstance.dec
-      outMethodBodyInstance.puts("}")
+      outMethodBody.dec
+      outMethodBody.puts("}")
     }
   }
 
@@ -849,9 +847,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
     switchOverrideStart()
     if (repeatWasUsertype) {
-      outMethodBodyInstance.puts("else")
-      outMethodBodyInstance.puts("{")
-      outMethodBodyInstance.inc
+      outMethodBody.puts("else")
+      outMethodBody.puts("{")
+      outMethodBody.inc
     }
   }
 
@@ -859,33 +857,39 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.dec
     outMethodBody.puts("}")
     if (repeatWasUsertype) {
-      outMethodBodyInstance.dec
-      outMethodBodyInstance.puts("}")
+      outMethodBody.dec
+      outMethodBody.puts("}")
     }
   }
 
   //</editor-fold>
+  def flagForInstName(ksName: Identifier) = s"flag_${idToStr(ksName)}"
+  def funcForInstName(ksName: Identifier) = s"get_${idToStr(ksName)}"
 
   override def instanceDeclaration(attrName: InstanceIdentifier, attrType: DataType, isNullable: Boolean): Unit = {
-    attributeDeclaration(attrName, attrType, isNullable)
+    outHdrInternalStruct.puts(s"ks_bool ${flagForInstName(attrName)};")
+    attributeDeclaration(attrName, attrType, isNullable, true)
   }
 
-  def instanceStart(classNameList: List[String]): Unit = {
-    val rootClassName = classNameList.head.toLowerCase()
+  override def instanceHeader(classNameList: List[String], instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {
     val className = makeName(classNameList)
-    currentClassName = className
-    outSrcDefs.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data);")
-    outSrcInstances.puts(s"static void ksx_read_${className}_instances(ks_stream* root_stream, ksx_$rootClassName* root_data, ks_stream* stream, ksx_$className* data)")
-    outSrcInstances.puts("{")
+    val name = privateMemberName(instName)
+
+    outMethodHead.puts(s"static void ksx_read_${className}_instance_${name}(ks_stream* root_stream, ks_stream* stream, ksx_$className* data)")
+    outMethodHead.puts("{")
     outMethodHead.inc
+    outMethodHead.puts(s"ksx_${className}_internal* getters = data->_handle.getters;")
     outMethodBody.inc
   }
 
-  override def instanceHeader(className: List[String], instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {}
-
   override def instanceFooter: Unit = makeFooter(true)
 
-  override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {}
+  override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {
+    outMethodBody.puts(s"if (getters->${flagForInstName(instName)})")
+    outMethodBody.inc
+    outMethodBody.puts("return;")
+    outMethodBody.dec
+  }
 
   override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {}
 
