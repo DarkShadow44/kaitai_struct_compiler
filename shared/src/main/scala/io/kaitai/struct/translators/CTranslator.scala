@@ -95,12 +95,12 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
         case Identifier.IO => "stream"
-        case Identifier.PARENT => "data->_parent"
+        case Identifier.PARENT => "data->data._parent"
         case Identifier.ROOT => "root_data"
         case _ => s"_temp$s"
       }
     } else {
-      s"data->$s"
+      s"FIELD(data, $s)"
     }
 
   override def doEnumByLabel(enumTypeAbs: List[String], label: String): String = {
@@ -217,7 +217,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     {
       return s"${translate(value)}->_handle.stream"
     }
-    s"${translate(value)}->$attrName"
+    s"FIELD(${translate(value)}, $attrName)"
   }
   override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
   override def doBoolLiteral(n: Boolean): String = if (n) "1" else "0"
