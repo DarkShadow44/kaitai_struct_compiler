@@ -155,7 +155,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outStruct.puts("{")
     outStruct.inc
     outStruct.puts("ks_handle _handle;")
-    outStruct.puts(s"ksx_${className}_internal* internal;")
+    outStruct.puts(s"ksx_${className}_internal* _internal;")
     outHdrDefs.puts(s"typedef struct ksx_${className}_ ksx_${className};")
     outHdrDefs.puts(s"typedef struct ksx_${className}_internal ksx_${className}_internal;")
 
@@ -225,7 +225,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_${className})));")
     outStruct.puts(s"$parentName* _parent;")
     outSrcMain.puts(s"data->_parent = ($parentName*)parent_data;")
-    outSrcMain.puts(s"data->internal = calloc(1, sizeof(ksx_${className}_internal));")
+    outSrcMain.puts(s"data->_internal = calloc(1, sizeof(ksx_${className}_internal));")
     outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
 
     outMethodHead.inc
@@ -346,8 +346,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     var getFunc = funcForInstName(attrName)
     outInternalStruct.puts(s"${typeStr} (*$getFunc)(ksx_${currentClassName}* data);")
-    outInstancesFill.puts(s"data->internal->$getFunc = ksx_get_${currentClassName}_${name};")
-    outInstancesRead.puts(s"data->internal->$getFunc(data);")
+    outInstancesFill.puts(s"data->_internal->$getFunc = ksx_get_${currentClassName}_${name};")
+    outInstancesRead.puts(s"data->_internal->$getFunc(data);")
   }
 
   override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
@@ -447,7 +447,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def instanceClear(instName: InstanceIdentifier): Unit = {}
 
   override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {
-    outMethodBody.puts(s"data->internal->${flagForInstName(instName)} = 1;")
+    outMethodBody.puts(s"data->_internal->${flagForInstName(instName)} = 1;")
   }
 
   override def condIfHeader(expr: expr): Unit = {
@@ -840,7 +840,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def instanceFooter: Unit = makeFooter(true)
 
   override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {
-    outMethodBody.puts(s"if (data->internal->${flagForInstName(instName)})")
+    outMethodBody.puts(s"if (data->_internal->${flagForInstName(instName)})")
     outMethodBody.inc
     outMethodBody.puts("return;")
     outMethodBody.dec
