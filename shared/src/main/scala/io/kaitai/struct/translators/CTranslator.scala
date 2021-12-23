@@ -95,7 +95,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
         case Identifier.IO => "stream"
-        case Identifier.PARENT => "data->data._parent"
+        case Identifier.PARENT => "data->_parent"
         case Identifier.ROOT => "root_data"
         case _ => s"_temp$s"
       }
@@ -112,23 +112,8 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
   override def doBytesCompareOp(left: Ast.expr, op: Ast.cmpop, right: Ast.expr): String =
     s"(ks_bytes_compare(${translate(left)}, ${translate(right)}) ${cmpOp(op)} 0)"
 
-  override def arraySubscript(container: expr, idx: expr): String = {
-    val cast = detectType(container) match {
-      case at: ArrayType =>
-        at.elType match {
-          case t: UserType =>
-            if (t.isOpaque) {
-              ""
-            } else {
-              val name = CCompiler.makeName(t.classSpec.get.name)
-              s"(ksx_${name}_internal*)"
-            }
-          case _ => ""
-        }
-      case _ => ""
-    }
-    s"($cast${translate(container)}->data[${translate(idx)}])"
-  }
+  override def arraySubscript(container: expr, idx: expr): String =
+    s"${translate(container)}->data[${translate(idx)}]"
   override def doIfExp(condition: expr, ifTrue: expr, ifFalse: expr): String =
     s"(${translate(condition)} ? ${translate(ifTrue)} : ${translate(ifFalse)})"
   override def doCast(value: Ast.expr, typeName: DataType): String = {
