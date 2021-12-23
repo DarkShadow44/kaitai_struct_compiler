@@ -840,13 +840,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def instanceFooter: Unit = makeFooter(true)
 
   override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {
+    outMethodHead.puts("int64_t _old_pos = ks_stream_get_pos(stream);")
     outMethodBody.puts(s"if (data->_internal->${flagForInstName(instName)})")
     outMethodBody.inc
     outMethodBody.puts("return;")
     outMethodBody.dec
   }
 
-  override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {}
+  override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {
+    outMethodBody.puts("ks_stream_seek(stream, _old_pos);")
+  }
 
   override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit = {
     lastWasInstanceValue = true
