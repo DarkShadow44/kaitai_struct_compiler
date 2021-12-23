@@ -217,6 +217,9 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     {
       return s"${translate(value)}->_handle.stream"
     }
+    if (attrName == "_parent") {
+      return s"${translate(value)}->$attrName"
+    }
     val dataType = detectType(value)
     dataType match {
       case t: UserType =>
