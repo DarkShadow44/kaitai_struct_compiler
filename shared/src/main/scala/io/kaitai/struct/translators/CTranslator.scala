@@ -217,7 +217,16 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     {
       return s"${translate(value)}->_handle.stream"
     }
-    s"FIELD(${translate(value)}, $attrName)"
+    val dataType = detectType(value)
+    dataType match {
+      case t: UserType =>
+        if (t.isOpaque) {
+          s"${translate(value)}->$attrName"
+        } else {
+          s"FIELD(${translate(value)}, $attrName)"
+        }
+      case _ => s"FIELD(${translate(value)}, $attrName)"
+    }
   }
   override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
   override def doBoolLiteral(n: Boolean): String = if (n) "1" else "0"
