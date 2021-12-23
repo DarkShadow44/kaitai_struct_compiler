@@ -331,7 +331,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcInstancesGet.puts("{")
     outSrcInstancesGet.inc
     if (isInstance) {
-      outSrcInstancesGet.puts(s"ksx_read_${currentClassName}_instance_${name}(ks_stream_get_root(data->_handle.stream), data->_handle.stream, data);")
+      outSrcInstancesGet.puts(s"ksx_read_${currentClassName}_instance_${name}(ks_stream_get_root(data->_handle.stream), (void*)ks_usertype_get_root((void*)data), data->_handle.stream, data);")
     }
     attrType match {
       case t: UserType =>
@@ -914,7 +914,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val className = makeName(classNameList)
     val name = privateMemberName(instName)
 
-    outMethodHead.puts(s"static void ksx_read_${className}_instance_${name}(ks_stream* root_stream, ks_stream* stream, ksx_${className}* data)")
+    outMethodHead.puts(s"static void ksx_read_${className}_instance_${name}(ks_stream* root_stream, ksx_${currentRootName}* root_data, ks_stream* stream, ksx_${className}* data)")
     outMethodHead.puts("{")
     outMethodHead.inc
     outMethodBody.inc
