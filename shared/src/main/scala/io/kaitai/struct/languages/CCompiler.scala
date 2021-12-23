@@ -469,30 +469,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
   }
 
-  var repeatWasUsertype = false
-
-  def instanceRepeatStart(name: String, dataType: DataType) : Unit = {
-     repeatWasUsertype = dataType match {
-      case t: UserType => true
-      case st: SwitchType =>
-         st.cases.values.exists((t) => t.isInstanceOf[UserType])
-      case _ => false
-    }
-    if (repeatWasUsertype) {
-      outMethodBody.puts(s"for (i = 0; i < data->$name->size; i++)")
-      outMethodBody.puts("{")
-      outMethodBody.inc
-    }
-  }
-
-  def instanceRepeatEnd() : Unit = {
-    if (repeatWasUsertype) {
-      outMethodBody.dec
-      outMethodBody.puts("}")
-    }
-    repeatWasUsertype = false
-  }
-
   override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw): Unit = {
     val name = privateMemberName(RawIdentifier(id))
     val pos = translator.doName(Identifier.INDEX)
@@ -510,8 +486,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"while (!ks_stream_is_eof($io_new)) {")
     outMethodBody.puts(s"$pos = data->$name->size;");
     outMethodBody.inc
-
-    instanceRepeatStart(name, dataType)
   }
 
   override def handleAssignmentRepeatEos(id: Identifier, expr: String): Unit = {
@@ -529,8 +503,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
     outMethodBody.dec
     outMethodBody.puts("}")
-
-    instanceRepeatEnd()
   }
 
   override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, repeatExpr: expr): Unit = {
@@ -549,8 +521,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
     outMethodBody.inc
-
-    instanceRepeatStart(name, dataType)
   }
 
   override def handleAssignmentRepeatExpr(id: Identifier, expr: String): Unit = {
@@ -559,8 +529,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def condRepeatExprFooter: Unit = {
     fileFooter(null)
-
-    instanceRepeatEnd()
   }
 
   override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
@@ -583,8 +551,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"do")
     outMethodBody.puts("{")
     outMethodBody.inc
-
-    instanceRepeatStart(name, dataType)
   }
 
   override def handleAssignmentRepeatUntil(id: Identifier, expr: String, isRaw: Boolean): Unit = {
@@ -608,8 +574,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"} while (!(${expression(untilExpr)}));")
     outMethodBody.dec
     outMethodBody.puts("}")
-
-    instanceRepeatEnd()
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
@@ -775,9 +739,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def switchStart(id: Identifier, on: Ast.expr): Unit = {
     outMethodBody.puts(s"switch (${expression(on)}) {")
-    if (repeatWasUsertype) {
-      outMethodBody.puts(s"switch (${expression(on)}) {")
-    }
   }
 
   override def switchCaseFirstStart(condition: Ast.expr): Unit = switchCaseStart(condition)
@@ -786,10 +747,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"case ${expression(condition)}: {")
     outMethodBody.inc
     switchOverrideStart()
-    if (repeatWasUsertype) {
-      outMethodBody.puts(s"case ${expression(condition)}: {")
-      outMethodBody.inc
-    }
   }
 
   override def switchCaseEnd(): Unit = {
@@ -797,28 +754,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("break;")
     outMethodBody.dec
     outMethodBody.puts("}")
-    if (repeatWasUsertype) {
-      outMethodBody.puts("break;")
-      outMethodBody.dec
-      outMethodBody.puts("}")
-    }
   }
 
   override def switchElseStart(): Unit = {
     outMethodBody.puts("default: {")
     outMethodBody.inc
     switchOverrideStart()
-    if (repeatWasUsertype) {
-      outMethodBody.puts("default: {")
-      outMethodBody.inc
-    }
   }
 
   override def switchEnd(): Unit = {
     outMethodBody.puts("}")
-    if (repeatWasUsertype) {
-      outMethodBody.puts("}")
-    }
   }
 
   //</editor-fold>
@@ -829,11 +774,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(onType)} ${expression(NAME_SWITCH_ON)} = ${expression(on)};")
-    if (repeatWasUsertype) {
-      outMethodBody.puts("{")
-      outMethodBody.inc
-      outMethodBody.puts(s"${kaitaiType2NativeType(onType)} ${expression(NAME_SWITCH_ON)} = ${expression(on)};")
-    }
   }
 
   def switchCmpExpr(condition: Ast.expr): String =
@@ -850,11 +790,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     switchOverrideStart()
-    if (repeatWasUsertype) {
-      outMethodBody.puts(s"if (${switchCmpExpr(condition)})")
-      outMethodBody.puts("{")
-      outMethodBody.inc
-    }
   }
 
   override def switchIfCaseStart(condition: Ast.expr): Unit = {
@@ -862,21 +797,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     switchOverrideStart()
-    if (repeatWasUsertype) {
-      outMethodBody.puts(s"else if (${switchCmpExpr(condition)})")
-      outMethodBody.puts("{")
-      outMethodBody.inc
-    }
   }
 
   override def switchIfCaseEnd(): Unit = {
     switchOverrideEnd()
     outMethodBody.dec
     outMethodBody.puts("}")
-    if (repeatWasUsertype) {
-      outMethodBody.dec
-      outMethodBody.puts("}")
-    }
   }
 
   override def switchIfElseStart(): Unit = {
@@ -884,20 +810,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     switchOverrideStart()
-    if (repeatWasUsertype) {
-      outMethodBody.puts("else")
-      outMethodBody.puts("{")
-      outMethodBody.inc
-    }
   }
 
   override def switchIfEnd(): Unit = {
     outMethodBody.dec
     outMethodBody.puts("}")
-    if (repeatWasUsertype) {
-      outMethodBody.dec
-      outMethodBody.puts("}")
-    }
   }
 
   //</editor-fold>
