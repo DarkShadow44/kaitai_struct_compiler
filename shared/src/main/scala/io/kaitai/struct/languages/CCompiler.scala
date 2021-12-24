@@ -128,17 +128,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val outInstancesFill = outSrcInstancesFillArray.last
     val outInstancesRead = outSrcInstancesReadArray.last
     if (outHdrStructs.length == 1) {
-      outHdr.puts
-      outHdr.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data);")
-      outSrcMain.puts
-      outSrcMain.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data)")
-      outSrcMain.puts("{")
-      outSrcMain.inc
-      outSrcMain.puts(s"memset(data, 0,sizeof(ksx_${className}));")
-      outSrcMain.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
-      outSrcMain.puts(s"return *stream->err;")
-      outSrcMain.dec
-      outSrcMain.puts("}")
     } else {
       outHdrArrays.puts
       outHdrArrays.puts(s"typedef struct ksx_array_${className}_")
@@ -212,13 +201,32 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     currentRootName = rootName
     val parentName = kaitaiType2NativeType(parentType)
     val outStruct = outHdrStructs.last
-    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data);");
+    val paramsArg = Utils.join(params.map(p => s"${kaitaiType2NativeType(p.dataType)}${getPtrSuffix(p.dataType)} ${paramName(p.id)}"), ", ", ", ", "")
+    val addParams = Utils.join(params.map(p => paramName(p.id)), ", ", ", ", "")
+    if (outHdrStructs.length == 1) {
+      outHdr.puts
+      outHdr.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data$paramsArg);")
+      outSrcMain.puts
+      outSrcMain.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data$paramsArg)")
+      outSrcMain.puts("{")
+      outSrcMain.inc
+      outSrcMain.puts(s"memset(data, 0,sizeof(ksx_${className}));")
+      outSrcMain.puts(s"ksx_read_$className(stream, data, 0, stream, data$addParams);")
+      outSrcMain.puts(s"return *stream->err;")
+      outSrcMain.dec
+      outSrcMain.puts("}")
+    }
+    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$paramsArg);");
     outSrcMain.puts
-    outSrcMain.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data)")
+    outSrcMain.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$paramsArg)")
     outSrcMain.puts("{")
     outSrcMain.inc
     outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_${className})));")
     outStruct.puts(s"$parentName* _parent;")
+    params.foreach((p) =>
+      outSrcMain.puts(s"data->${idToStr(p.id)} = ${paramName(p.id)};")
+    )
+
     outSrcMain.puts(s"data->_parent = ($parentName*)parent_data;")
     outSrcMain.puts(s"data->_internal = calloc(1, sizeof(ksx_${className}_internal));")
     outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
@@ -634,11 +642,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case None => "data"
         }
         val typeName = makeName(t.classSpec.get.name)
+        val addParams = Utils.join(t.args.map((a) => translator.translate(a)), ", ", ", ", "")
         outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
         if (importedTypes.contains(typeName)) {
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget$addParams));")
         } else {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget$addParams));")
         }
         // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
@@ -648,13 +657,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case None => "data"
         }
         val typeName = makeName(t.classSpec.get.name)
+        val addParams = Utils.join(t.args.map((a) => translator.translate(a)), ", ", ", ", "")
         outMethodBody.puts(s"/* Subtype */")
         if (importedTypes.contains(typeName)) {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget$addParams));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}*)data->$nameTarget));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}*)data->$nameTarget$addParams));")
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
