@@ -590,10 +590,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val pos = translator.doName(Identifier.INDEX)
         nameTarget = s"$name->data[$pos]"
     }
-    if (lastWasInstanceValue) {
-        lastWasInstanceValue = false
-        return
-    }
     val io_new = makeIO(io)
     // outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
     val targetType = kaitaiType2NativeType(dataType)
@@ -680,7 +676,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   var assignTypeLast: DataType = null;
   var ioLast: String = "";
   var defEndianLast: Option[FixedEndian] = null
-  var lastWasInstanceValue : Boolean = false
 
   override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
     dataTypeLast = dataType;
@@ -853,7 +848,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit = {
-    lastWasInstanceValue = true
     val name = privateMemberName(instName)
     val ex = expression(value)
     outMethodBody.puts(s"data->$name = $ex;")
