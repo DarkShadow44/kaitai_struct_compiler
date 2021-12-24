@@ -24,7 +24,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val importListSrc = new CppImportList
   val importListHdr = new CppImportList
 
-  val translator = new CTranslator(typeProvider, importListSrc)
+  val translator = new CTranslator(typeProvider, importListSrc, true)
 
   var outMethodHead = new StringLanguageOutputWriter(indent)
   var outMethodBody = new StringLanguageOutputWriter(indent)

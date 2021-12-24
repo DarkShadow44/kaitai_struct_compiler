@@ -10,7 +10,7 @@ import io.kaitai.struct.format.SpecialIdentifier
 import io.kaitai.struct.languages.CCompiler
 import io.kaitai.struct.languages.components.CppImportList
 
-class CTranslator(provider: TypeProvider, importList: CppImportList) extends BaseTranslator(provider) {
+class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal: Boolean) extends BaseTranslator(provider) {
   def doArrayLiteralInternal(t: DataType, value: Seq[expr]): String = {
     val size = value.size
     val args = value.map(translate).mkString(", ")
@@ -100,7 +100,11 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
         case _ => s"_temp$s"
       }
     } else {
-      s"FIELD(data, $s)"
+      if (isInternal) {
+         s"FIELD(data, $s)"
+      } else {
+         s"data->$s"
+      }
     }
 
   override def doEnumByLabel(enumTypeAbs: List[String], label: String): String = {
@@ -217,7 +221,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList) extends Bas
     {
       return s"${translate(value)}->_handle.stream"
     }
-    if (attrName == "_parent") {
+    if (attrName == "_parent" || !isInternal) {
       return s"${translate(value)}->$attrName"
     }
     val dataType = detectType(value)
