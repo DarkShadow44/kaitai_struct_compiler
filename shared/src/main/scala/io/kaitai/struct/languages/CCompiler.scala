@@ -134,6 +134,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrcMain.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data)")
       outSrcMain.puts("{")
       outSrcMain.inc
+      outSrcMain.puts(s"memset(data, 0,sizeof(ksx_${className}));")
       outSrcMain.puts(s"ksx_read_$className(stream, data, 0, stream, data);")
       outSrcMain.puts(s"return *stream->err;")
       outSrcMain.dec
@@ -173,6 +174,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.puts(s"static void ksx_read_${className}_instances(ksx_${className}* data)")
     outInstancesRead.puts("{")
     outInstancesRead.inc
+    outInstancesRead.puts(s"if (ks_usertype_get_depth((void*)data) > 100) return; /* Avoid stack overflow for broken ksy files */")
 
     typeProvider.nowClass.meta.endian match {
       case Some(_: CalcEndian) | Some(InheritedEndian) =>
