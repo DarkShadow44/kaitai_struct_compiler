@@ -84,6 +84,8 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
     (detectType(left), detectType(right), op) match {
       case (_: IntType, _: IntType, Ast.operator.Mod) =>
         s"ks_mod(${translate(left)}, ${translate(right)})"
+      case (_: IntType, _: IntType, Ast.operator.Div) =>
+        s"ks_div(${translate(left)}, ${translate(right)})"
       case _ =>
         super.numericBinOp(left, op, right)
     }
