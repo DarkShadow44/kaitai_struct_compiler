@@ -175,13 +175,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.puts("{")
     outInstancesRead.inc
     outInstancesRead.puts(s"if (ks_usertype_get_depth((void*)data) > 100) return; /* Avoid stack overflow for broken ksy files */")
-
-    typeProvider.nowClass.meta.endian match {
-      case Some(_: CalcEndian) | Some(InheritedEndian) =>
-        outStruct.puts(s"ks_bool ${privateMemberName(EndianIdentifier)};")
-      case _ =>
-        // no _is_le variable
-    }
   }
 
   override def classFooter(name: List[String]): Unit = {
@@ -229,6 +222,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcMain.puts(s"data->_parent = ($parentName*)parent_data;")
     outSrcMain.puts(s"data->_internal = calloc(1, sizeof(ksx_${className}_internal));")
     outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
+
+    typeProvider.nowClass.meta.endian match {
+      case Some(_: CalcEndian) | Some(InheritedEndian) =>
+        outStruct.puts(s"ks_bool ${privateMemberName(EndianIdentifier)};")
+      case _ =>
+    }
 
     outMethodHead.inc
     outMethodBody.inc
