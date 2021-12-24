@@ -384,7 +384,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcInstancesGet.puts("{")
     outSrcInstancesGet.inc
     if (isInstance) {
-      outSrcInstancesGet.puts(s"ksx_read_${currentClassName}_instance_${name}(ks_stream_get_root(data->_handle.stream), (void*)ks_usertype_get_root((void*)data), data->_handle.stream, data);")
+      outSrcInstancesGet.puts(s"ks_stream* stream = data->_handle.stream;")
+      outSrcInstancesGet.puts(s"CHECK(ksx_read_${currentClassName}_instance_${name}(ks_stream_get_root(stream), (void*)ks_usertype_get_root((void*)data), stream, data), data->$name);")
     }
     attrType match {
       case t: UserType =>
@@ -999,7 +1000,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("{")
     outMethodBody.inc
     //outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
-    outMethodBody.puts(s"*stream->err = 1;")
+    outMethodBody.puts("CHECK2(1, \"Validation error\", VOID);")
     outMethodBody.puts(s"return;")
     outMethodBody.dec
     outMethodBody.puts("}")
