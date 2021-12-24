@@ -165,7 +165,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.inc
     outInstancesRead.puts("int64_t i;")
     outInstancesRead.puts("(void)i;")
-    outInstancesRead.puts(s"if (ks_usertype_get_depth((void*)data) > 100) return; /* Avoid stack overflow for broken ksy files */")
   }
 
   override def classFooter(name: List[String]): Unit = {
