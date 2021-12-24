@@ -235,7 +235,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     typeProvider.nowClass.meta.endian match {
       case Some(_: CalcEndian) | Some(InheritedEndian) =>
-        outStruct.puts(s"ks_bool ${privateMemberName(EndianIdentifier)};")
+        val name = privateMemberName(EndianIdentifier)
+        outStruct.puts(s"ks_bool $name;")
+        outSrcMain.puts(s"data->$name = -1;")
       case _ =>
     }
 
@@ -253,8 +255,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def runReadCalc(): Unit = {
+    val errorStr = "\"Unspecified endianess!\""
     outMethodBody.puts
-    outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)}) {")
+    outMethodBody.puts(s"CHECK2(data->${privateMemberName(EndianIdentifier)} != -1, $errorStr, VOID);")
+    outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)} == 1) {")
     outMethodBody.inc
     outMethodBody.puts(s"CHECKV(ksx_read_${currentClassNames.last}_le(root_stream, root_data, stream, data));");
     outMethodBody.dec
@@ -412,7 +416,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def universalDoc(doc: DocSpec): Unit = {}
 
   override def attrParseHybrid(leProc: () => Unit, beProc: () => Unit): Unit = {
-    outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)}) {")
+    outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)} == 1) {")
     outMethodBody.inc
     leProc()
     outMethodBody.dec
