@@ -359,6 +359,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             }
           case _ =>
         }
+      case KaitaiStructType =>
+        val outInternalStruct = outHdrInternalStructs.last
+        outInstancesRead.puts(s"data->_internal->_read_instances_$name(data->$name);")
+        outInternalStruct.puts(s"void (*_read_instances_$name)(ks_usertype_generic* data);")
       case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, attrName, isNullable)
       case _ =>
     }
@@ -665,6 +669,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     // outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
     val targetType = kaitaiType2NativeType(dataType)
 
+    var isKaitaiGeneric = false;
+    val currentAttr = typeProvider.nowClass.seq.find(x => idToStr(x.id) == idToStr(id))
+    if (!currentAttr.isEmpty) {
+      isKaitaiGeneric = currentAttr.get.dataType match {
+        case t: SwitchType =>
+          t.combinedType match {
+            case KaitaiStructType => true
+            case _ => false
+          }
+        case _ => false
+      }
+    }
+
     dataType match {
       case t: ReadableType =>
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_${t.apiCall(defEndian)}($io_new));")
@@ -722,6 +739,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         }
         // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
+        if (isKaitaiGeneric) {
+          outMethodBody.puts(s"data->_internal->_read_instances_$name = (void*)ksx_read_${typeName}_instances;")
+        }
       case t: UserTypeInstream =>
         val parent = t.forcedParent match {
           case Some(USER_TYPE_NO_PARENT) => "0"
@@ -746,6 +766,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}*)data->$nameTarget$addEndian$addParams));")
+        }
+        if (isKaitaiGeneric) {
+          outMethodBody.puts(s"data->_internal->_read_instances_$name = (void*)ksx_read_${typeName}_instances;")
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
