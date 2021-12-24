@@ -218,9 +218,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrcMain.dec
       outSrcMain.puts("}")
     }
-    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$paramsArg);");
+    val endianess = if (isHybrid) ", ks_bool is_le" else ""
+    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$endianess$paramsArg);");
     outSrcMain.puts
-    outSrcMain.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$paramsArg)")
+    outSrcMain.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$endianess$paramsArg)")
     outSrcMain.puts("{")
     outSrcMain.inc
     outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_${className})));")
@@ -237,7 +238,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case Some(_: CalcEndian) | Some(InheritedEndian) =>
         val name = privateMemberName(EndianIdentifier)
         outStruct.puts(s"ks_bool $name;")
-        outSrcMain.puts(s"data->$name = -1;")
+        if (isHybrid) {
+          outSrcMain.puts(s"data->$name = is_le;")
+        } else {
+          outSrcMain.puts(s"data->$name = -1;")
+        }
       case _ =>
     }
 
@@ -257,7 +262,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def runReadCalc(): Unit = {
     val errorStr = "\"Unspecified endianess!\""
     outMethodBody.puts
-    outMethodBody.puts(s"CHECK2(data->${privateMemberName(EndianIdentifier)} != -1, $errorStr, VOID);")
+    outMethodBody.puts(s"CHECK2(data->${privateMemberName(EndianIdentifier)} == -1, $errorStr, VOID);")
     outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)} == 1) {")
     outMethodBody.inc
     outMethodBody.puts(s"CHECKV(ksx_read_${currentClassNames.last}_le(root_stream, root_data, stream, data));");
@@ -706,11 +711,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             case _ => translator.translate(a)
           }
          ), ", ", ", ", "")
+        val addEndian = t.classSpec.get.meta.endian match {
+          case Some(InheritedEndian) => s", data->${privateMemberName(EndianIdentifier)}"
+          case _ => ""
+        }
         outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
         if (importedTypes.contains(typeName)) {
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget$addParams));")
+          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         } else {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget$addParams));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         }
         // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
       case t: UserTypeInstream =>
@@ -726,13 +735,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             case _ => translator.translate(a)
           }
          ), ", ", ", ", "")
+        val addEndian = t.classSpec.get.meta.endian match {
+          case Some(InheritedEndian) => s", data->${privateMemberName(EndianIdentifier)}"
+          case _ => ""
+        }
         outMethodBody.puts(s"/* Subtype */")
         if (importedTypes.contains(typeName)) {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget$addParams));")
+          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         } else {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}*)data->$nameTarget$addParams));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}*)data->$nameTarget$addEndian$addParams));")
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
