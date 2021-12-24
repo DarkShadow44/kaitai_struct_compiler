@@ -427,7 +427,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"${privateMemberName(attrName)} = $normalIO.EnsureFixedContents($contents);")
 
   override def attrProcess(proc: ProcessExpr, varSrc: Identifier, varDest: Identifier, rep: RepeatSpec): Unit = {
-    val srcExpr = "_raw_" + getRawIdExpr(varSrc, rep)
+    val srcExpr = "_raw_" + privateMemberName(varSrc)
 
     val expr = proc match {
       case ProcessXor(xorValue) =>
@@ -457,6 +457,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"_decoder_$name2 = ${procClass}_create(${args.map(expression).mkString(", ")});")
         outMethodBody.puts(s"$srcExpr = _decoder_$name2.decode(_decoder_$name2.userdata, $srcExpr);")
     }
+    varDest match {
+      case RawIdentifier(_) =>
+      case _ =>
+         val target = getRawIdExpr(varDest, rep)
+        outMethodBody.puts(s"data->$target = $srcExpr;")
+    }
   }
 
   override def allocateIO(varName: Identifier, rep: RepeatSpec): String = {
@@ -464,7 +470,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     val ioName = s"_io_$privateVarName"
 
-    val args = getRawIdExpr(varName, rep)
+    val args = privateMemberName(varName)
 
     outMethodHead.puts(s"ks_stream* $ioName;")
     outMethodBody.puts(s"/* Subtype with substream */")
@@ -476,7 +482,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val memberName = privateMemberName(varName)
     rep match {
       case NoRepeat => memberName
-      case _ => s"$memberName"
+      case _ => s"$memberName->data[i]"
     }
   }
 
