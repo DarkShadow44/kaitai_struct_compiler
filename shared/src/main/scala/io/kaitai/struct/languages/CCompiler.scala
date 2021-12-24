@@ -163,6 +163,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.puts(s"static void ksx_read_${className}_instances(ksx_${className}* data)")
     outInstancesRead.puts("{")
     outInstancesRead.inc
+    outInstancesRead.puts("int64_t i;")
+    outInstancesRead.puts("(void)i;")
     outInstancesRead.puts(s"if (ks_usertype_get_depth((void*)data) > 100) return; /* Avoid stack overflow for broken ksy files */")
   }
 
@@ -212,6 +214,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrcMain.inc
       outSrcMain.puts(s"memset(data, 0,sizeof(ksx_${className}));")
       outSrcMain.puts(s"ksx_read_$className(stream, data, 0, stream, data$addParams);")
+      outSrcMain.puts(s"ksx_read_${className}_instances(data);")
       outSrcMain.puts(s"return *stream->err;")
       outSrcMain.dec
       outSrcMain.puts("}")
@@ -242,7 +245,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def classConstructorFooter: Unit = {
-    outSrcMain.puts(s"ksx_read_${currentClassNames.last}_instances(data);")
     outSrcMain.dec
     outSrcMain.puts("}")
   }
@@ -311,6 +313,30 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attributeDeclaration(attrName, attrType, isNullable, false)
   }
 
+  def handleInstanceReads(outInstancesRead: StringLanguageOutputWriter, attrType: DataType, name: String): Unit = {
+    attrType match {
+      case t: UserType =>
+        if (t.isOpaque) return
+        val typename = makeName(t.classSpec.get.name)
+        outInstancesRead.puts(s"ksx_read_${typename}_instances(data->$name);")
+      case at: ArrayType =>
+        at.elType match {
+          case t: UserType =>
+            if (t.isOpaque) return
+            val typename = makeName(t.classSpec.get.name)
+            outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
+            outInstancesRead.puts("{")
+            outInstancesRead.inc
+            outInstancesRead.puts(s"ksx_read_${typename}_instances(data->$name->data[i]);")
+            outInstancesRead.dec
+            outInstancesRead.puts("}")
+          case _ =>
+        }
+      case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, name)
+      case _ =>
+    }
+  }
+
   def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean, isInstance: Boolean): Unit = {
     val outStruct = outHdrStructs.last
     val outInternalStruct = outHdrInternalStructs.last
@@ -357,6 +383,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInternalStruct.puts(s"${typeStr} (*$getFunc)(ksx_${currentClassName}* data);")
     outInstancesFill.puts(s"data->_internal->$getFunc = ksx_get_${currentClassName}_${name};")
     outInstancesRead.puts(s"data->_internal->$getFunc(data);")
+    handleInstanceReads(outInstancesRead, attrType, name)
   }
 
   override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
@@ -644,7 +671,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val typeName = makeName(t.classSpec.get.name)
         val addParams = Utils.join(t.args.map((a) =>
           translator.detectType(a) match {
-            case t : UserType => "(void*)" + translator.translate(a) /* Possibly need cast to generic struct */
+            case t: UserType => "(void*)" + translator.translate(a) /* Possibly need cast to generic struct */
             case _ => translator.translate(a)
           }
          ), ", ", ", ", "")
@@ -664,7 +691,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val typeName = makeName(t.classSpec.get.name)
         val addParams = Utils.join(t.args.map((a) =>
           translator.detectType(a) match {
-            case t : UserType => "(void*)" + translator.translate(a)
+            case t: UserType => "(void*)" + translator.translate(a)
             case _ => translator.translate(a)
           }
          ), ", ", ", ", "")
