@@ -642,7 +642,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case None => "data"
         }
         val typeName = makeName(t.classSpec.get.name)
-        val addParams = Utils.join(t.args.map((a) => translator.translate(a)), ", ", ", ", "")
+        val addParams = Utils.join(t.args.map((a) =>
+          translator.detectType(a) match {
+            case t : UserType => "(void*)" + translator.translate(a) /* Possibly need cast to generic struct */
+            case _ => translator.translate(a)
+          }
+         ), ", ", ", ", "")
         outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
         if (importedTypes.contains(typeName)) {
           outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget$addParams));")
@@ -657,7 +662,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case None => "data"
         }
         val typeName = makeName(t.classSpec.get.name)
-        val addParams = Utils.join(t.args.map((a) => translator.translate(a)), ", ", ", ", "")
+        val addParams = Utils.join(t.args.map((a) =>
+          translator.detectType(a) match {
+            case t : UserType => "(void*)" + translator.translate(a)
+            case _ => translator.translate(a)
+          }
+         ), ", ", ", ", "")
         outMethodBody.puts(s"/* Subtype */")
         if (importedTypes.contains(typeName)) {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
