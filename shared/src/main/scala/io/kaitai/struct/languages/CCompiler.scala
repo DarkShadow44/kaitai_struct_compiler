@@ -313,26 +313,45 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attributeDeclaration(attrName, attrType, isNullable, false)
   }
 
-  def handleInstanceReads(outInstancesRead: StringLanguageOutputWriter, attrType: DataType, name: String): Unit = {
+  def handleInstanceReads(outInstancesRead: StringLanguageOutputWriter, attrType: DataType, attrName: Identifier, isNullable: Boolean): Unit = {
+    val name = idToStr(attrName)
     attrType match {
       case t: UserType =>
         if (t.isOpaque) return
         val typename = makeName(t.classSpec.get.name)
+        if (isNullable) {
+          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
+          outInstancesRead.puts("{")
+          outInstancesRead.inc
+        }
         outInstancesRead.puts(s"ksx_read_${typename}_instances(data->$name);")
+        if (isNullable) {
+          outInstancesRead.dec
+          outInstancesRead.puts("}")
+        }
       case at: ArrayType =>
         at.elType match {
           case t: UserType =>
             if (t.isOpaque) return
             val typename = makeName(t.classSpec.get.name)
+            if (isNullable) {
+                outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
+                outInstancesRead.puts("{")
+                outInstancesRead.inc
+            }
             outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
             outInstancesRead.puts("{")
             outInstancesRead.inc
             outInstancesRead.puts(s"ksx_read_${typename}_instances(data->$name->data[i]);")
             outInstancesRead.dec
             outInstancesRead.puts("}")
+            if (isNullable) {
+              outInstancesRead.dec
+              outInstancesRead.puts("}")
+            }
           case _ =>
         }
-      case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, name)
+      case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, attrName, isNullable)
       case _ =>
     }
   }
@@ -383,7 +402,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInternalStruct.puts(s"${typeStr} (*$getFunc)(ksx_${currentClassName}* data);")
     outInstancesFill.puts(s"data->_internal->$getFunc = ksx_get_${currentClassName}_${name};")
     outInstancesRead.puts(s"data->_internal->$getFunc(data);")
-    handleInstanceReads(outInstancesRead, attrType, name)
+    handleInstanceReads(outInstancesRead, attrType, attrName, isNullable)
   }
 
   override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
