@@ -400,7 +400,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     var getFunc = funcForInstName(attrName)
     outInternalStruct.puts(s"${typeStr} (*$getFunc)(ksx_${currentClassName}* data);")
     outInstancesFill.puts(s"data->_internal->$getFunc = ksx_get_${currentClassName}_${name};")
-    outInstancesRead.puts(s"data->_internal->$getFunc(data);")
+    if (isInstance) {
+      outInstancesRead.puts(s"data->_internal->$getFunc(data);")
+    }
     handleInstanceReads(outInstancesRead, attrType, attrName, isNullable)
   }
 
