@@ -701,7 +701,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case _ => false
     }
   }
-
   def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian], expr: String, isArray: Boolean)
   {
     // TODO: Use io!
@@ -711,7 +710,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val pos = translator.doName(Identifier.INDEX)
         nameTarget = s"$name->data[$pos]"
     }
-    val io_new = makeIO(io)
+    var io_new = makeIO(io)
     // outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
     val targetType = kaitaiType2NativeType(dataType)
 
@@ -750,7 +749,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, 1));")
       case BitsType(width: Int, bitEndian) =>
         outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width));")
-      case t: UserTypeFromBytes =>
+      case t: UserType =>
+        val isBytes = t match {
+          case t2: UserTypeFromBytes => true
+          case _ => false
+        }
         val parent = t.forcedParent match {
           case Some(USER_TYPE_NO_PARENT) => "0"
           case Some(fp) => translator.translate(fp)
@@ -762,46 +765,21 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             case t: UserType => "(void*)" + translator.translate(a) /* Possibly need cast to generic struct */
             case _ => translator.translate(a)
           }
-         ), ", ", ", ", "")
+        ), ", ", ", ", "")
         val addEndian = t.classSpec.get.meta.endian match {
           case Some(InheritedEndian) => s", data->${privateMemberName(EndianIdentifier)}"
           case _ => ""
+        }
+        if (isBytes) {
+          io_new = s"_io_$name"
+        } else {
+          outMethodBody.puts(s"/* Subtype */")
         }
         outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-        if (t.isOpaque) {
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
-        } else {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
-        }
-        // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
-        if (isKaitaiGeneric) {
-          val arr = if (isArray) "[i]" else ""
-          outMethodBody.puts(s"data->_internal->_read_instances_$name$arr = (void*)ksx_read_${typeName}_instances;")
-        }
-      case t: UserTypeInstream =>
-        val parent = t.forcedParent match {
-          case Some(USER_TYPE_NO_PARENT) => "0"
-          case Some(fp) => translator.translate(fp)
-          case None => "data"
-        }
-        val typeName = makeName(t.classSpec.get.name)
-        val addParams = Utils.join(t.args.map((a) =>
-          translator.detectType(a) match {
-            case t: UserType => "(void*)" + translator.translate(a)
-            case _ => translator.translate(a)
-          }
-         ), ", ", ", ", "")
-        val addEndian = t.classSpec.get.meta.endian match {
-          case Some(InheritedEndian) => s", data->${privateMemberName(EndianIdentifier)}"
-          case _ => ""
-        }
-        outMethodBody.puts(s"/* Subtype */")
-        if (t.isOpaque) {
-          outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
+        if (t.isOpaque && t.classSpec.get != typeProvider.topClass) { // Our own top class is *not* opaque!
           outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         } else {
-          outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}*)data->$nameTarget$addEndian$addParams));")
+          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         }
         if (isKaitaiGeneric) {
           val arr = if (isArray) "[i]" else ""
