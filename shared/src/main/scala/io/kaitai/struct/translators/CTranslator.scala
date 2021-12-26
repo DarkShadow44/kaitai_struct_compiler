@@ -142,7 +142,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
     s"ks_string_from_int(${translate(i)}, ${translate(base)})"
   }
   override def bytesToStr(bytesExpr: String, encoding: Ast.expr): String =
-    s"ks_string_from_bytes($bytesExpr)"
+    s"ks_string_from_bytes($bytesExpr, ${translate(encoding)})"
 
   override def strLength(s: expr): String =
     s"${translate(s)}->len"

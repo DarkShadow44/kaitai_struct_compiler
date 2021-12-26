@@ -465,7 +465,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             outMethodBody.puts("Unknown xor type: " + t.toString())
         }
       case ProcessZlib =>
-        outMethodBody.puts(s"$srcExpr = stream->config.inflate($srcExpr);")
+        outMethodBody.puts(s"$srcExpr = stream->config->inflate($srcExpr);")
       case ProcessRotate(isLeft, rotValue) =>
         val expr = if (isLeft) {
           expression(rotValue)
