@@ -212,8 +212,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrcMain.puts("{")
       outSrcMain.inc
       outSrcMain.puts(s"memset(data, 0,sizeof(ksx_${className}));")
-      outSrcMain.puts(s"CHECK(ksx_read_$className(stream, data, 0, stream, data$addParams), *stream->err;);")
-      outSrcMain.puts(s"CHECK(ksx_read_${className}_instances(data), *stream->err;);")
+      outSrcMain.puts(s"CHECK(ksx_read_$className(stream, data, 0, stream, data$addParams), *stream->err);")
+      outSrcMain.puts(s"CHECK(ksx_read_${className}_instances(data), *stream->err);")
       outSrcMain.puts(s"return *stream->err;")
       outSrcMain.dec
       outSrcMain.puts("}")
