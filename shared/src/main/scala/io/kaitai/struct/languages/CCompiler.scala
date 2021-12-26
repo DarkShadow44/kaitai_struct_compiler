@@ -564,7 +564,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw): Unit = {
-    val name = privateMemberName(RawIdentifier(id))
+    val name = privateMemberName(id)
     val pos = translator.doName(Identifier.INDEX)
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
@@ -583,7 +583,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentRepeatEos(id: Identifier, expr: String): Unit = {
-    val name = privateMemberName(RawIdentifier(id))
+    val name = privateMemberName(id)
     val ptr = getPtrSuffix(dataTypeLast)
     val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)}$ptr)"
     outMethodBody.puts(s"data->$name->size++;")
@@ -606,7 +606,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, repeatExpr: expr): Unit = {
     val pos = translator.doName(Identifier.INDEX)
     val len = expression(repeatExpr)
-    val name = privateMemberName(RawIdentifier(id))
+    val name = privateMemberName(id)
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
     val ptr = getPtrSuffix(dataType)
@@ -634,7 +634,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
     val pos = translator.doName(Identifier.INDEX)
-    val name = privateMemberName(RawIdentifier(id))
+    val name = privateMemberName(id)
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
     val ptr = getPtrSuffix(dataType)
@@ -659,7 +659,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
       return
     }
-    val name = privateMemberName(RawIdentifier(id))
+    val name = privateMemberName(id)
     val nameTemp = translator.doName(Identifier.ITERATOR)
     val ptr = getPtrSuffix(dataTypeLast)
     val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)}$ptr)"
