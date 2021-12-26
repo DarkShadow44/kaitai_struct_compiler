@@ -641,6 +641,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def handleAssignmentRepeatUntil(id: Identifier, expr: String, isRaw: Boolean): Unit = {
+    if (isRaw) {
+      handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
+      return
+    }
     val name = privateMemberName(RawIdentifier(id))
     val nameTemp = translator.doName(Identifier.ITERATOR)
     val ptr = getPtrSuffix(dataTypeLast)
