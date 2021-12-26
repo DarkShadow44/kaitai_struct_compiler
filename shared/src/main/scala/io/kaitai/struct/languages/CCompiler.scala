@@ -359,12 +359,31 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
               outInstancesRead.dec
               outInstancesRead.puts("}")
             }
+          case AnyType =>
+            val typename = kaitaiType2NativeType(at.elType)
+            if (isNullable) {
+              outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)} && data->_internal->_read_instances_$name)")
+              outInstancesRead.puts("{")
+              outInstancesRead.inc
+            }
+            outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
+            outInstancesRead.puts("{")
+            outInstancesRead.inc
+            outInstancesRead.puts(s"CHECKV(data->_internal->_read_instances_$name(((void**)data->$name->data)[i]));")
+            outInstancesRead.dec
+            outInstancesRead.puts("}")
+            if (isNullable) {
+              outInstancesRead.dec
+              outInstancesRead.puts("}")
+            }
+            val outInternalStruct = outHdrInternalStructs.last
+            outInternalStruct.puts(s"void (*_read_instances_$name)(void* data);")
           case _ =>
         }
-      case KaitaiStructType =>
+      case KaitaiStructType | AnyType =>
         val outInternalStruct = outHdrInternalStructs.last
         if (isNullable) {
-          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
+          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)} && data->_internal->_read_instances_$name)")
           outInstancesRead.puts("{")
           outInstancesRead.inc
         }
@@ -373,7 +392,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outInstancesRead.dec
           outInstancesRead.puts("}")
         }
-        outInternalStruct.puts(s"void (*_read_instances_$name)(ks_usertype_generic* data);")
+        outInternalStruct.puts(s"void (*_read_instances_$name)(void* data);")
       case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, attrName, isNullable)
       case _ =>
     }
@@ -690,7 +709,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       isKaitaiGeneric = currentAttr.get.dataType match {
         case t: SwitchType =>
           t.combinedType match {
-            case KaitaiStructType => true
+            case KaitaiStructType | AnyType => true
             case _ => false
           }
         case _ => false
