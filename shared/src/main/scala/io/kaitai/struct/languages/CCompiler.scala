@@ -45,7 +45,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outSrcInstancesGet = new StringLanguageOutputWriter(indent)
   val outSrcInternalStruct =  new StringLanguageOutputWriter(indent)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
-  val importedTypes : ListBuffer[String] = ListBuffer()
   var outMethodHasI = false
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
@@ -106,13 +105,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def opaqueClassDeclaration(classSpec: ClassSpec): Unit = {
     val name = classSpec.name.head.toLowerCase();
-    importedTypes.append(name)
     importListHdr.addLocal(outFileNameHeader(name))
   }
 
  override def importFile(file: String): Unit = {
     val name = file.toLowerCase().split("/").last
-    importedTypes.append(name)
     importListHdr.addLocal(outFileNameHeader(name))
     outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_$name;")
   }
@@ -771,7 +768,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case _ => ""
         }
         outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
-        if (importedTypes.contains(typeName)) {
+        if (t.isOpaque) {
           outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream(_io_$name, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         } else {
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, _io_$name, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
@@ -799,7 +796,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case _ => ""
         }
         outMethodBody.puts(s"/* Subtype */")
-        if (importedTypes.contains(typeName)) {
+        if (t.isOpaque) {
           outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_${typeName}));")
           outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
         } else {
