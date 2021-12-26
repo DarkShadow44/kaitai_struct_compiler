@@ -323,6 +323,50 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attributeDeclaration(attrName, attrType, isNullable, false)
   }
 
+
+  def handleInstanceReadsArray(outInstancesRead: StringLanguageOutputWriter, attrType: DataType, attrName: Identifier, isNullable: Boolean): Unit = {
+    val name = idToStr(attrName)
+    attrType match {
+      case t: UserType =>
+        if (t.isOpaque) return
+        val typename = makeName(t.classSpec.get.name)
+        if (isNullable) {
+          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
+          outInstancesRead.puts("{")
+          outInstancesRead.inc
+        }
+        outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
+        outInstancesRead.puts("{")
+        outInstancesRead.inc
+        outInstancesRead.puts(s"CHECKV(ksx_read_${typename}_instances(data->$name->data[i]));")
+        outInstancesRead.dec
+        outInstancesRead.puts("}")
+        if (isNullable) {
+          outInstancesRead.dec
+          outInstancesRead.puts("}")
+        }
+      case AnyType =>
+        if (isNullable) {
+          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)} && data->_internal->_read_instances_$name)")
+          outInstancesRead.puts("{")
+          outInstancesRead.inc
+        }
+        outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
+        outInstancesRead.puts("{")
+        outInstancesRead.inc
+        outInstancesRead.puts(s"CHECKV(data->_internal->_read_instances_$name(((void**)data->$name->data)[i]));")
+        outInstancesRead.dec
+        outInstancesRead.puts("}")
+        if (isNullable) {
+          outInstancesRead.dec
+          outInstancesRead.puts("}")
+        }
+        val outInternalStruct = outHdrInternalStructs.last
+        outInternalStruct.puts(s"void (*_read_instances_$name)(void* data);")
+      case st: SwitchType => handleInstanceReadsArray(outInstancesRead, st.combinedType, attrName, isNullable)
+      case _ =>
+    }
+  }
   def handleInstanceReads(outInstancesRead: StringLanguageOutputWriter, attrType: DataType, attrName: Identifier, isNullable: Boolean): Unit = {
     val name = idToStr(attrName)
     attrType match {
@@ -340,46 +384,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outInstancesRead.puts("}")
         }
       case at: ArrayType =>
-        at.elType match {
-          case t: UserType =>
-            if (t.isOpaque) return
-            val typename = makeName(t.classSpec.get.name)
-            if (isNullable) {
-              outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
-              outInstancesRead.puts("{")
-              outInstancesRead.inc
-            }
-            outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
-            outInstancesRead.puts("{")
-            outInstancesRead.inc
-            outInstancesRead.puts(s"CHECKV(ksx_read_${typename}_instances(data->$name->data[i]));")
-            outInstancesRead.dec
-            outInstancesRead.puts("}")
-            if (isNullable) {
-              outInstancesRead.dec
-              outInstancesRead.puts("}")
-            }
-          case AnyType =>
-            val typename = kaitaiType2NativeType(at.elType)
-            if (isNullable) {
-              outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)} && data->_internal->_read_instances_$name)")
-              outInstancesRead.puts("{")
-              outInstancesRead.inc
-            }
-            outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
-            outInstancesRead.puts("{")
-            outInstancesRead.inc
-            outInstancesRead.puts(s"CHECKV(data->_internal->_read_instances_$name(((void**)data->$name->data)[i]));")
-            outInstancesRead.dec
-            outInstancesRead.puts("}")
-            if (isNullable) {
-              outInstancesRead.dec
-              outInstancesRead.puts("}")
-            }
-            val outInternalStruct = outHdrInternalStructs.last
-            outInternalStruct.puts(s"void (*_read_instances_$name)(void* data);")
-          case _ =>
-        }
+        handleInstanceReadsArray(outInstancesRead, at.elType, attrName, isNullable)
       case KaitaiStructType | AnyType =>
         val outInternalStruct = outHdrInternalStructs.last
         if (isNullable) {
