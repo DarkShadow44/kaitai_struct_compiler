@@ -598,7 +598,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val name = privateMemberName(RawIdentifier(id))
     val dataTypeArray = ArrayTypeInStream(dataType)
     val arrayTypeSize = getKaitaiTypeEnumAndSize(dataType)
-    val ptr = getPtrSuffix(dataTypeLast)
+    val ptr = getPtrSuffix(dataType)
     outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-expr) */")
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
