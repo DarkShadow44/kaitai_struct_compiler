@@ -165,6 +165,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.inc
     outInstancesRead.puts("int64_t i;")
     outInstancesRead.puts("(void)i;")
+    outInstancesRead.puts("ks_stream* stream = data->_handle.stream;")
+    outInstancesRead.puts("(void)stream;")
   }
 
   override def classFooter(name: List[String]): Unit = {
@@ -332,7 +334,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outInstancesRead.puts("{")
           outInstancesRead.inc
         }
-        outInstancesRead.puts(s"ksx_read_${typename}_instances(data->$name);")
+        outInstancesRead.puts(s"CHECKV(ksx_read_${typename}_instances(data->$name));")
         if (isNullable) {
           outInstancesRead.dec
           outInstancesRead.puts("}")
@@ -343,14 +345,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
             if (t.isOpaque) return
             val typename = makeName(t.classSpec.get.name)
             if (isNullable) {
-                outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
-                outInstancesRead.puts("{")
-                outInstancesRead.inc
+              outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
+              outInstancesRead.puts("{")
+              outInstancesRead.inc
             }
             outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
             outInstancesRead.puts("{")
             outInstancesRead.inc
-            outInstancesRead.puts(s"ksx_read_${typename}_instances(data->$name->data[i]);")
+            outInstancesRead.puts(s"CHECKV(ksx_read_${typename}_instances(data->$name->data[i]));")
             outInstancesRead.dec
             outInstancesRead.puts("}")
             if (isNullable) {
@@ -361,7 +363,16 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         }
       case KaitaiStructType =>
         val outInternalStruct = outHdrInternalStructs.last
-        outInstancesRead.puts(s"data->_internal->_read_instances_$name(data->$name);")
+        if (isNullable) {
+          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
+          outInstancesRead.puts("{")
+          outInstancesRead.inc
+        }
+        outInstancesRead.puts(s"CHECKV(data->_internal->_read_instances_$name(data->$name));")
+        if (isNullable) {
+          outInstancesRead.dec
+          outInstancesRead.puts("}")
+        }
         outInternalStruct.puts(s"void (*_read_instances_$name)(ks_usertype_generic* data);")
       case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, attrName, isNullable)
       case _ =>
