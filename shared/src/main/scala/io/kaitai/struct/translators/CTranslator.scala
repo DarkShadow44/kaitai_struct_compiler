@@ -29,12 +29,14 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
     }
   }
 
-  override def doByteArrayLiteral(arr: Seq[Byte]): String =
+  override def doByteArrayLiteral(arr: Seq[Byte]): String = {
+    val stream = if (isInternal) "stream" else "0"
     if (arr.size == 0) {
-      s"ks_bytes_from_data(0)"
+      s"ks_bytes_from_data($stream, 0)"
     } else {
-      s"ks_bytes_from_data(${arr.size}, ${arr.map(_ & 0xff).mkString(", ")})"
+      s"ks_bytes_from_data($stream, ${arr.size}, ${arr.map(_ & 0xff).mkString(", ")})"
     }
+  }
   override def doByteArrayNonLiteral(elts: Seq[Ast.expr]): String =
     s"new byte[] { ${elts.map(translate).mkString(", ")} }"
 
