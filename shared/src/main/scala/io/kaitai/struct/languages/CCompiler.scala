@@ -323,6 +323,38 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     attributeDeclaration(attrName, attrType, isNullable, false)
   }
 
+  def handleInstanceReadsCommon(outInstancesRead: StringLanguageOutputWriter, attrName: Identifier, isNullable: Boolean, isArray: Boolean, isCallback: Boolean, expr: String): Unit = {
+    val name = idToStr(attrName)
+    if (isNullable) {
+      outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
+      outInstancesRead.puts("{")
+      outInstancesRead.inc
+    }
+    if (isArray) {
+      outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
+      outInstancesRead.puts("{")
+      outInstancesRead.inc
+    }
+     if (isCallback) {
+      val arr = if (isArray) "[i]" else ""
+      outInstancesRead.puts(s"if (data->_internal->_read_instances_$name$arr)")
+      outInstancesRead.puts("{")
+      outInstancesRead.inc
+    }
+    outInstancesRead.puts(expr)
+     if (isCallback) {
+      outInstancesRead.dec
+      outInstancesRead.puts("}")
+    }
+    if (isArray) {
+      outInstancesRead.dec
+      outInstancesRead.puts("}")
+    }
+    if (isNullable) {
+      outInstancesRead.dec
+      outInstancesRead.puts("}")
+    }
+  }
 
   def handleInstanceReadsArray(outInstancesRead: StringLanguageOutputWriter, attrType: DataType, attrName: Identifier, isNullable: Boolean): Unit = {
     val name = idToStr(attrName)
@@ -330,39 +362,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case t: UserType =>
         if (t.isOpaque) return
         val typename = makeName(t.classSpec.get.name)
-        if (isNullable) {
-          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
-          outInstancesRead.puts("{")
-          outInstancesRead.inc
-        }
-        outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
-        outInstancesRead.puts("{")
-        outInstancesRead.inc
-        outInstancesRead.puts(s"CHECKV(ksx_read_${typename}_instances(data->$name->data[i]));")
-        outInstancesRead.dec
-        outInstancesRead.puts("}")
-        if (isNullable) {
-          outInstancesRead.dec
-          outInstancesRead.puts("}")
-        }
+        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, true, false, s"CHECKV(ksx_read_${typename}_instances(data->$name->data[i]));")
       case AnyType =>
-        if (isNullable) {
-          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)} && data->_internal->_read_instances_$name)")
-          outInstancesRead.puts("{")
-          outInstancesRead.inc
-        }
-        outInstancesRead.puts(s"for (i = 0; i < data->$name->size; i++)")
-        outInstancesRead.puts("{")
-        outInstancesRead.inc
-        outInstancesRead.puts(s"CHECKV(data->_internal->_read_instances_$name(((void**)data->$name->data)[i]));")
-        outInstancesRead.dec
-        outInstancesRead.puts("}")
-        if (isNullable) {
-          outInstancesRead.dec
-          outInstancesRead.puts("}")
-        }
+        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, true, true, s"CHECKV(data->_internal->_read_instances_$name[i](((void**)data->$name->data)[i]));")
         val outInternalStruct = outHdrInternalStructs.last
-        outInternalStruct.puts(s"void (*_read_instances_$name)(void* data);")
+        outInternalStruct.puts(s"ks_callback* _read_instances_$name;")
       case st: SwitchType => handleInstanceReadsArray(outInstancesRead, st.combinedType, attrName, isNullable)
       case _ =>
     }
@@ -373,31 +377,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case t: UserType =>
         if (t.isOpaque) return
         val typename = makeName(t.classSpec.get.name)
-        if (isNullable) {
-          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)})")
-          outInstancesRead.puts("{")
-          outInstancesRead.inc
-        }
-        outInstancesRead.puts(s"CHECKV(ksx_read_${typename}_instances(data->$name));")
-        if (isNullable) {
-          outInstancesRead.dec
-          outInstancesRead.puts("}")
-        }
+        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, false, false, s"CHECKV(ksx_read_${typename}_instances(data->$name));")
       case at: ArrayType =>
         handleInstanceReadsArray(outInstancesRead, at.elType, attrName, isNullable)
       case KaitaiStructType | AnyType =>
+        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, false, true, s"CHECKV(data->_internal->_read_instances_$name(data->$name));")
         val outInternalStruct = outHdrInternalStructs.last
-        if (isNullable) {
-          outInstancesRead.puts(s"if (data->${nullFlagForName(attrName)} && data->_internal->_read_instances_$name)")
-          outInstancesRead.puts("{")
-          outInstancesRead.inc
-        }
-        outInstancesRead.puts(s"CHECKV(data->_internal->_read_instances_$name(data->$name));")
-        if (isNullable) {
-          outInstancesRead.dec
-          outInstancesRead.puts("}")
-        }
-        outInternalStruct.puts(s"void (*_read_instances_$name)(void* data);")
+        outInternalStruct.puts(s"ks_callback _read_instances_$name;")
       case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, attrName, isNullable)
       case _ =>
     }
@@ -606,6 +592,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name->size++;")
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
+    if (isTypeGeneric(id)) {
+      outMethodBody.puts(s"data->_internal->_read_instances_$name = realloc(data->_internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
+      outMethodBody.puts(s"data->_internal->_read_instances_$name[data->$name->size -1] = 0;")
+    }
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
   }
 
@@ -628,6 +618,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
     outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}$ptr), data->$name->size);")
+    if (isTypeGeneric(id)) {
+      outMethodBody.puts(s"data->_internal->_read_instances_$name = calloc(sizeof(ks_callback), data->$name->size);")
+    }
     outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
@@ -676,6 +669,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name->size++;")
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
+    if (isTypeGeneric(id)) {
+      outMethodBody.puts(s"data->_internal->_read_instances_$name = realloc(data->_internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
+      outMethodBody.puts(s"data->_internal->_read_instances_$name[data->$name->size -1] = 0;")
+    }
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
     val pos = translator.doName(Identifier.INDEX)
     outMethodBody.puts(s"$nameTemp = data->$name->data[$pos];");
@@ -695,6 +692,19 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, false)
   }
 
+  def isTypeGeneric(id: Identifier): Boolean = {
+    val currentAttr = typeProvider.nowClass.seq.find(x => idToStr(x.id) == idToStr(id))
+    if (currentAttr.isEmpty) return false;
+    currentAttr.get.dataType match {
+      case t: SwitchType =>
+        t.combinedType match {
+          case KaitaiStructType | AnyType => true
+          case _ => false
+        }
+      case _ => false
+    }
+  }
+
   def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian], expr: String, isArray: Boolean)
   {
     // TODO: Use io!
@@ -708,18 +718,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     // outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
     val targetType = kaitaiType2NativeType(dataType)
 
-    var isKaitaiGeneric = false;
-    val currentAttr = typeProvider.nowClass.seq.find(x => idToStr(x.id) == idToStr(id))
-    if (!currentAttr.isEmpty) {
-      isKaitaiGeneric = currentAttr.get.dataType match {
-        case t: SwitchType =>
-          t.combinedType match {
-            case KaitaiStructType | AnyType => true
-            case _ => false
-          }
-        case _ => false
-      }
-    }
+    var isKaitaiGeneric = isTypeGeneric(id);
 
     dataType match {
       case t: ReadableType =>
@@ -779,7 +778,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         }
         // outMethodBody.puts(s"ks_stream_destroy(_io_$name);")
         if (isKaitaiGeneric) {
-          outMethodBody.puts(s"data->_internal->_read_instances_$name = (void*)ksx_read_${typeName}_instances;")
+          val arr = if (isArray) "[i]" else ""
+          outMethodBody.puts(s"data->_internal->_read_instances_$name$arr = (void*)ksx_read_${typeName}_instances;")
         }
       case t: UserTypeInstream =>
         val parent = t.forcedParent match {
@@ -807,7 +807,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_${typeName}*)data->$nameTarget$addEndian$addParams));")
         }
         if (isKaitaiGeneric) {
-          outMethodBody.puts(s"data->_internal->_read_instances_$name = (void*)ksx_read_${typeName}_instances;")
+          val arr = if (isArray) "[i]" else ""
+          outMethodBody.puts(s"data->_internal->_read_instances_$name$arr = (void*)ksx_read_${typeName}_instances;")
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
