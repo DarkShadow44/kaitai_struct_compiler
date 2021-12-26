@@ -1,0 +1,3 @@
+#!/bin/bash
+
+g++ -I ../../runtime/cpp_stl *.cpp ../../runtime/cpp_stl/kaitai/*.cpp -o test.app -DKS_STR_ENCODING_NONE -lboost_unit_test_framework
