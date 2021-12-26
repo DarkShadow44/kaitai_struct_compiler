@@ -161,8 +161,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.puts("{")
     outInstancesRead.inc
     outInstancesRead.puts("int64_t i;")
-    outInstancesRead.puts("(void)i;")
     outInstancesRead.puts("ks_stream* stream = data->_handle.stream;")
+    outInstancesRead.puts("(void)i;")
     outInstancesRead.puts("(void)stream;")
   }
 
@@ -518,7 +518,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def useIO(ioEx: expr): String = {
-    outMethodBody.puts(s"$kstreamName* io = ${expression(ioEx)};")
+    outMethodHead.puts(s"$kstreamName* io;")
+    outMethodBody.puts(s"io = ${expression(ioEx)};")
     "io"
   }
 
@@ -646,8 +647,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
-    outMethodBody.puts("i = 0;")
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)}$ptr ${translator.doName("_")} = {0};")
+    outMethodBody.puts("i = 0;")
     outMethodBody.puts(s"(void)${translator.doName("_")};")
     outMethodBody.puts(s"do")
     outMethodBody.puts("{")
