@@ -564,7 +564,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
   }
 
-  override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw): Unit = {
+  override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType): Unit = {
     val name = privateMemberName(id)
     val pos = translator.doName(Identifier.INDEX)
     val dataTypeArray = ArrayTypeInStream(dataType)
@@ -604,7 +604,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
   }
 
-  override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, repeatExpr: expr): Unit = {
+  override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, repeatExpr: expr): Unit = {
     val pos = translator.doName(Identifier.INDEX)
     val len = expression(repeatExpr)
     val name = privateMemberName(id)
@@ -633,7 +633,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     fileFooter(null)
   }
 
-  override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
+  override def condRepeatCommonInit(id: Identifier, dataType: DataType, needRaw: NeedRaw): Unit = {
+  }
+
+  override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, untilExpr: expr): Unit = {
     val pos = translator.doName(Identifier.INDEX)
     val name = privateMemberName(id)
     val dataTypeArray = ArrayTypeInStream(dataType)
@@ -676,7 +679,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"$nameTemp = data->$name->data[$pos];");
   }
 
-  override def condRepeatUntilFooter(id: Identifier, io: String, dataType: DataType, needRaw: NeedRaw, untilExpr: expr): Unit = {
+  override def condRepeatUntilFooter(id: Identifier, io: String, dataType: DataType, untilExpr: expr): Unit = {
     val pos = translator.doName(Identifier.INDEX)
     typeProvider._currentIteratorType = Some(dataType)
     outMethodBody.puts(s"$pos++;")
