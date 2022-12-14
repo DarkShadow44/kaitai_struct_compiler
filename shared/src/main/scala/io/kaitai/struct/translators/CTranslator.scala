@@ -38,7 +38,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
     }
   }
   override def doByteArrayNonLiteral(elts: Seq[Ast.expr]): String =
-    s"new byte[] { ${elts.map(translate).mkString(", ")} }"
+    s"ks_bytes_from_data_terminated(stream, ${elts.map(translate).mkString(", ")}, 0xffff)"
 
   override val asciiCharQuoteMap: Map[Char, String] = Map(
     '\t' -> "\\t",
