@@ -101,7 +101,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
         case Identifier.IO => "stream"
         case Identifier.PARENT => "data->_parent"
         case Identifier.ROOT => "root_data"
-        case _ => s"_temp$s"
+        case _ => s"_temp"
       }
     } else {
       if (isInternal) {
@@ -110,6 +110,9 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
          s"data->$s"
       }
     }
+
+  override def doInternalName(id: Identifier): String =
+    doName(CCompiler.idToStr(id))
 
   override def doEnumByLabel(enumTypeAbs: List[String], label: String): String = {
     val enumClass = enumTypeAbs.drop(1).mkString("_")

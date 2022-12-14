@@ -1018,25 +1018,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrDefs.puts(s"typedef struct ksx_array_${enumClass}_ ksx_array_$enumClass;")
   }
 
-  def idToStr(id: Identifier): String = {
-    id match {
-      case SpecialIdentifier(name) => name
-      case NamedIdentifier(name) => name.toLowerCase()
-      case NumberedIdentifier(idx) => s"_${NumberedIdentifier.TEMPLATE}$idx"
-      case InstanceIdentifier(name) => name.toLowerCase()
-      case RawIdentifier(innerId) => idToStr(innerId)
-    }
-  }
+  def idToStr(id: Identifier): String = CCompiler.idToStr(id)
 
-  override def publicMemberName(id: Identifier): String = {
-    id match {
-      case SpecialIdentifier(name) => s"M${Utils.upperCamelCase(name)}"
-      case NamedIdentifier(name) => Utils.upperCamelCase(name)
-      case NumberedIdentifier(idx) => s"${NumberedIdentifier.TEMPLATE.capitalize}_$idx"
-      case InstanceIdentifier(name) => Utils.upperCamelCase(name)
-      case RawIdentifier(innerId) => s"M_Raw${publicMemberName(innerId)}"
-    }
-  }
+  def publicMemberName(id: Identifier): String = idToStr(id)
 
   override def privateMemberName(id: Identifier): String = s"${idToStr(id)}"
 
@@ -1058,8 +1042,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val name = privateMemberName(attrId)
     outMethodBody.puts("{")
     outMethodBody.inc
-    outMethodBody.puts(s"$typeStr$ptr _temp_ = data->$name;")
-    outMethodBody.puts(s"(void)_temp_;")
+    outMethodBody.puts(s"$typeStr$ptr _temp = data->$name;")
+    outMethodBody.puts(s"(void)_temp;")
     val errArgsStr = errArgs.map(translator.translate).mkString(", ")
     outMethodBody.puts(s"if (!(${translator.translate(checkExpr)}))")
     outMethodBody.puts("{")
@@ -1084,6 +1068,16 @@ object CCompiler extends LanguageCompilerStatic
     tp: ClassTypeProvider,
     config: RuntimeConfig
   ): LanguageCompiler = new CCompiler(tp, config)
+
+  def idToStr(id: Identifier): String = {
+    id match {
+      case SpecialIdentifier(name) => name
+      case NamedIdentifier(name) => name.toLowerCase()
+      case NumberedIdentifier(idx) => s"_${NumberedIdentifier.TEMPLATE}$idx"
+      case InstanceIdentifier(name) => name.toLowerCase()
+      case RawIdentifier(innerId) => idToStr(innerId)
+    }
+  }
 
   def kaitaiType2NativeTypeArray(attrType: DataType): String = {
     attrType match {
