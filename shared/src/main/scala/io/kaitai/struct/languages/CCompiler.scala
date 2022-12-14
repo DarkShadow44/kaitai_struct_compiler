@@ -111,7 +111,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
  override def importFile(file: String): Unit = {
     val name = file.toLowerCase().split("/").last
     importListHdr.addLocal(outFileNameHeader(name))
-    outHdrDefs.puts(s"typedef struct ksx_${name}_ ksx_$name;")
+    outHdrDefs.puts("/* Import */")
+    outHdrDefs.puts(s"#ifndef HAVE_DECL_$name")
+    outHdrDefs.puts(s"#define HAVE_DECL_$name")
+    outHdrDefs.puts(s"typedef struct ksx_${name} ksx_$name;")
+    outHdrDefs.puts(s"#endif")
+    outHdrDefs.puts
   }
 
   override def classHeader(name: List[String]): Unit = {
@@ -125,31 +130,35 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val outInstancesFill = outSrcInstancesFillArray.last
     val outInstancesRead = outSrcInstancesReadArray.last
     if (outHdrStructs.length == 1) {
+      outHdrDefs.puts(s"/* Main struct */")
+      outHdrDefs.puts(s"#ifndef HAVE_DECL_$className")
+      outHdrDefs.puts(s"#define HAVE_DECL_$className")
+      outHdrDefs.puts(s"typedef struct ksx_${className} ksx_${className};")
+      outHdrDefs.puts(s"#endif")
     } else {
       outHdrArrays.puts
-      outHdrArrays.puts(s"typedef struct ksx_array_${className}_")
+      outHdrArrays.puts(s"struct ksx_array_${className}")
       outHdrArrays.puts("{")
       outHdrArrays.inc
       outHdrArrays.puts("ks_handle _handle;")
       outHdrArrays.puts("int64_t size;")
       outHdrArrays.puts(s"ksx_$className** data;")
       outHdrArrays.dec
-      outHdrArrays.puts(s"} ksx_array_$className;")
-      outHdrDefs.puts(s"typedef struct ksx_array_${className}_ ksx_array_${className};")
+      outHdrArrays.puts(s"};")
+      outHdrDefs.puts(s"typedef struct ksx_${className} ksx_${className};")
+      outHdrDefs.puts(s"typedef struct ksx_array_${className} ksx_array_${className};")
     }
     outStruct.puts
-    outStruct.puts(s"typedef struct ksx_${className}_")
+    outStruct.puts(s"struct ksx_${className}")
     outStruct.puts("{")
     outStruct.inc
     outStruct.puts("ks_handle _handle;")
     outStruct.puts(s"ksx_${className}_internal* _internal;")
-    outHdrDefs.puts(s"typedef struct ksx_${className}_ ksx_${className};")
     outHdrDefs.puts(s"typedef struct ksx_${className}_internal ksx_${className}_internal;")
 
-    outInternalStruct.puts(s"typedef struct ksx_${className}_internal")
+    outInternalStruct.puts(s"struct ksx_${className}_internal")
     outInternalStruct.puts("{")
     outInternalStruct.inc
-    outSrcDefs.puts(s"typedef struct ksx_${className}_internal ksx_${className}_internal;");
 
     outSrcDefs.puts(s"static void ksx_fill_${className}_instances(ksx_${className}* data);")
     outInstancesFill.puts(s"static void ksx_fill_${className}_instances(ksx_${className}* data)")
@@ -178,9 +187,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcInstancesFillArray.remove(outSrcInstancesFillArray.length - 1)
     outSrcInstancesReadArray.remove(outSrcInstancesReadArray.length - 1)
     outStruct.dec
-    outStruct.puts(s"} ksx_$className;")
+    outStruct.puts(s"};")
     outInternalStruct.dec
-    outInternalStruct.puts(s"} ksx_${className}_internal;")
+    outInternalStruct.puts(s"};")
     outHdr.add(outStruct)
     outSrcInternalStruct.add(outInternalStruct)
     outInstancesFill.dec
@@ -1007,15 +1016,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrEnums.puts(s"} $enumClass2;")
 
     outHdrArrays.puts
-    outHdrArrays.puts(s"typedef struct ksx_array_${enumClass}_")
+    outHdrArrays.puts(s"struct ksx_array_${enumClass}")
     outHdrArrays.puts("{")
     outHdrArrays.inc
     outHdrArrays.puts("ks_handle _handle;")
     outHdrArrays.puts("int64_t size;")
     outHdrArrays.puts(s"ksx_$enumClass* data;")
     outHdrArrays.dec
-    outHdrArrays.puts(s"} ksx_array_$enumClass;")
-    outHdrDefs.puts(s"typedef struct ksx_array_${enumClass}_ ksx_array_$enumClass;")
+    outHdrArrays.puts(s"};")
+    outHdrDefs.puts(s"typedef struct ksx_array_${enumClass} ksx_array_$enumClass;")
   }
 
   def idToStr(id: Identifier): String = CCompiler.idToStr(id)
