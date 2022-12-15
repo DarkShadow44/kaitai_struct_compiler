@@ -101,7 +101,8 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
         case Identifier.IO => "stream"
         case Identifier.PARENT => "data->_parent"
         case Identifier.ROOT => "root_data"
-        case _ => s"_temp"
+        case Identifier.ITERATOR => "_temp"
+        case _ => s"data->$s"
       }
     } else {
       if (isInternal) {
