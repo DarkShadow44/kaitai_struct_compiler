@@ -255,22 +255,22 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outHdr.puts
       outHdr.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data$paramsArg);")
       outSrcMain.puts
-      outSrcMain.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}* data$paramsArg)")
+      outSrcMain.puts(s"int ksx_read_${className}_from_stream(ks_stream* stream, ksx_${className}** data$paramsArg)")
       outSrcMain.puts("{")
       outSrcMain.inc
-      outSrcMain.puts(s"memset(data, 0,sizeof(ksx_${className}));")
-      outSrcMain.puts(s"CHECK(ksx_read_$className(stream, data, 0, stream, data$addParams), *stream->err);")
+      outSrcMain.puts(s"CHECK(*data$paramsArg = ksx_read_$className(stream, data, 0, stream, data$addParams), *stream->err);")
       outSrcMain.puts(s"CHECK(ksx_read_${className}_instances(data), *stream->err);")
       outSrcMain.puts(s"return *stream->err;")
       outSrcMain.dec
       outSrcMain.puts("}")
     }
     val endianess = if (isHybrid) ", ks_bool is_le" else ""
-    outSrcDefs.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$endianess$paramsArg);");
+    outSrcDefs.puts(s"static ksx_${className}* ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream$endianess$paramsArg);");
     outSrcMain.puts
-    outSrcMain.puts(s"static void ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream, ksx_${className}* data$endianess$paramsArg)")
+    outSrcMain.puts(s"static ksx_${className}* ksx_read_${className}(ks_stream* root_stream, ksx_${rootName}* root_data, void* parent_data, ks_stream* stream$endianess$paramsArg)")
     outSrcMain.puts("{")
     outSrcMain.inc
+    outSrcMain.puts("ksx_${className}* data = calloc(1, sizeof(ksx_${className}));")
     outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_${className})));")
     outStruct.puts(s"$parentName* _parent;")
     params.foreach((p) =>
@@ -298,6 +298,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def classConstructorFooter: Unit = {
+    outSrcMain.puts("return data;")
     outSrcMain.dec
     outSrcMain.puts("}")
   }
@@ -464,11 +465,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("ks_stream_seek(stream, _old_pos);")
   }
 
-  override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit = {
-    val name = privateMemberName(instName)
-    val ex = expression(value)
-    outMethodBody.puts(s"data->$name = $ex;")
-  }
+  override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit =
+    handleAssignmentSimple(instName, s"${expression(value)}")
 
   override def instanceClear(instName: InstanceIdentifier): Unit = {}
 
@@ -745,6 +743,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
   }
 
+  override def handleAssignmentSimple(id: Identifier, expr: String): Unit =
+    handleAssignmentCommon(id, expr, false)
+
+  override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit = {}
+
   // ##############################
   // Repeat Eos
   // ##############################
@@ -779,7 +782,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outMethodBody.puts(s"data->_internal->_read_instances_$name = realloc(data->_internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
       outMethodBody.puts(s"data->_internal->_read_instances_$name[data->$name->size -1] = 0;")
     }
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
+    handleAssignmentCommon(id, expr, true)
   }
 
   override def condRepeatEosFooter: Unit = {
@@ -814,9 +817,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.inc
   }
 
-  override def handleAssignmentRepeatExpr(id: Identifier, expr: String): Unit = {
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
-  }
+  override def handleAssignmentRepeatExpr(id: Identifier, expr: String): Unit =
+    handleAssignmentCommon(id, expr, true)
 
   override def condRepeatExprFooter: Unit = {
     fileFooter(null)
@@ -850,7 +852,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def handleAssignmentRepeatUntil(id: Identifier, expr: String, isRaw: Boolean): Unit = {
     if (isRaw) {
-      handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
+      handleAssignmentCommon(id, expr, true)
       return
     }
     val name = privateMemberName(id)
@@ -864,7 +866,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outMethodBody.puts(s"data->_internal->_read_instances_$name = realloc(data->_internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
       outMethodBody.puts(s"data->_internal->_read_instances_$name[data->$name->size -1] = 0;")
     }
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, true)
+    handleAssignmentCommon(id, expr, true)
     val pos = translator.doName(Identifier.INDEX)
     outMethodBody.puts(s"$nameTemp = data->$name->data[$pos];");
   }
@@ -880,66 +882,64 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   // ##############################
-  // Assignment
+  // Expression handling
   // ##############################
 
-  override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
-    handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, false)
+  override def blockScopeHeader: Unit = {
+    outMethodBody.puts("{")
+    outMethodBody.inc
+  }
+  override def blockScopeFooter: Unit = {
+    outMethodBody.dec
+    outMethodBody.puts("}")
   }
 
-  def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian], expr: String, isArray: Boolean)
-  {
-    // TODO: Use io!
+  var dataTypeLast: DataType = null;
+
+  def handleAssignmentCommon(id: Identifier, expr: String, isArray: Boolean): Unit = {
+    if (expr == "") {
+      return
+    }
     val name = privateMemberName(id)
     var nameTarget = name
     if (isArray) {
         val pos = translator.doName(Identifier.INDEX)
         nameTarget = s"$name->data[$pos]"
     }
-    var io_new = makeIO(io)
-    // outMethodBody.puts(s"/* $io -> ${dataType.toString()} __ ${assignType.toString()} */")
-    val targetType = kaitaiType2NativeType(dataType)
+    out.puts(s"CHECKV(data->$nameTarget = $expr);")
+    dataTypeLast match {
+      case t: UserType =>
+        if (isTypeGeneric(id)) {
+          val typeName = makeName(t.classSpec.get.name)
+          val arr = if (isArray) "[i]" else ""
+          outMethodBody.puts(s"data->_internal->_read_instances_$name$arr = (void*)ksx_read_${typeName}_instances;")
+        }
+      case _ =>
+    }
+  }
 
-    var isKaitaiGeneric = isTypeGeneric(id);
+  override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
+    dataTypeLast = dataType;
+    var io_new = makeIO(io)
+    val targetType = kaitaiType2NativeType(dataType)
 
     dataType match {
       case t: ReadableType =>
-        outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_${t.apiCall(defEndian)}($io_new));")
+        s"ks_stream_read_${t.apiCall(defEndian)}($io_new))"
       case blt: BytesLimitType =>
-        outMethodHead.puts(s"ks_bytes* _raw_$name;")
-        outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes($io_new, ${expression(blt.size)}));")
-        id match {
-          case RawIdentifier(_) =>
-          case _ =>
-            val expr2 = expr.replace("__EXPR__", s"_raw_$name")
-            outMethodBody.puts(s"data->$nameTarget = $expr2;")
-        }
+        s"ks_stream_read_bytes($io_new, ${expression(blt.size)})"
       case _: BytesEosType =>
-        outMethodHead.puts(s"ks_bytes* _raw_$name;")
-        outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes_full($io_new));")
-        id match {
-          case RawIdentifier(_) =>
-          case _ =>
-            val expr2 = expr.replace("__EXPR__", s"_raw_$name")
-            outMethodBody.puts(s"data->$nameTarget = $expr2;")
-        }
+        s"ks_stream_read_bytes_full($io_new)"
       case BytesTerminatedType(terminator, include, consume, eosError, _) =>
         val include2 = if (include) 1 else 0
         val consume2 = if (consume) 1 else 0
         val eosError2 = if (eosError) 1 else 0
-        outMethodHead.puts(s"ks_bytes *_raw_$name;")
-        outMethodBody.puts(s"CHECKV(_raw_$name = ks_stream_read_bytes_term($io_new, $terminator, $include2, $consume2, $eosError2));")
-        val expr2 = expr.replace("__EXPR__", s"_raw_$name")
-        outMethodBody.puts(s"data->$nameTarget = $expr2;")
+        s"ks_stream_read_bytes_term($io_new, $terminator, $include2, $consume2, $eosError2)"
       case BitsType1(bitEndian) =>
-        outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, 1));")
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, 1)"
       case BitsType(width: Int, bitEndian) =>
-        outMethodBody.puts(s"CHECKV(data->$nameTarget = ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width));")
+        s"ks_stream_read_bits_${bitEndian.toSuffix.toLowerCase()}($io_new, $width)"
       case t: UserType =>
-        val isBytes = t match {
-          case t2: UserTypeFromBytes => true
-          case _ => false
-        }
         val parent = t.forcedParent match {
           case Some(USER_TYPE_NO_PARENT) => "0"
           case Some(fp) => translator.translate(fp)
@@ -956,52 +956,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           case Some(InheritedEndian) => s", data->${privateMemberName(EndianIdentifier)}"
           case _ => ""
         }
-        if (isBytes) {
-          io_new = s"_io_$name"
-        } else {
-          outMethodBody.puts(s"/* Subtype */")
-        }
-        outMethodBody.puts(s"data->$nameTarget = calloc(1, sizeof(ksx_$typeName));")
         if (t.isOpaque && t.classSpec.get != typeProvider.topClass) { // Our own top class is *not* opaque!
-          outMethodBody.puts(s"CHECKV(ksx_read_${typeName}_from_stream($io_new, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
+          s"ksx_read_${typeName}_from_stream($io_new$addEndian$addParams)"
         } else {
-          outMethodBody.puts(s"CHECKV(ksx_read_$typeName(root_stream, root_data, $parent, $io_new, (ksx_$typeName*)data->$nameTarget$addEndian$addParams));")
-        }
-        if (isKaitaiGeneric) {
-          val arr = if (isArray) "[i]" else ""
-          outMethodBody.puts(s"data->_internal->_read_instances_$name$arr = (void*)ksx_read_${typeName}_instances;")
+          s"ksx_read_$typeName(root_stream, root_data, $parent, $io_new$addEndian$addParams)"
         }
       case _ =>
         outMethodBody.puts("Missing expression type: " + dataType.toString())
+        ""
     }
-  }
-
-  override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit = {}
-
-  // ##############################
-  // Expression handling
-  // ##############################
-
-  override def blockScopeHeader: Unit = {
-    outMethodBody.puts("{")
-    outMethodBody.inc
-  }
-  override def blockScopeFooter: Unit = {
-    outMethodBody.dec
-    outMethodBody.puts("}")
-  }
-
-  var dataTypeLast: DataType = null;
-  var assignTypeLast: DataType = null;
-  var ioLast: String = "";
-  var defEndianLast: Option[FixedEndian] = null
-
-  override def parseExpr(dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian]): String = {
-    dataTypeLast = dataType;
-    assignTypeLast = assignType;
-    ioLast = io;
-    defEndianLast = defEndian;
-    "__EXPR__"
   }
 
   override def bytesPadTermExpr(expr0: String, padRight: Option[Int], terminator: Option[Int], include: Boolean) = {
