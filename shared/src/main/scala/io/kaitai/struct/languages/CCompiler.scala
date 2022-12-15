@@ -63,6 +63,61 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def indent: String = "    "
 
+  // ##############################
+  // Namings
+  // ##############################
+
+  def idToStr(id: Identifier): String = CCompiler.idToStr(id)
+
+  def publicMemberName(id: Identifier): String = idToStr(id)
+
+  override def privateMemberName(id: Identifier): String = s"${idToStr(id)}"
+
+  override def localTemporaryName(id: Identifier): String = s"_t_${idToStr(id)}"
+
+  override def paramName(id: Identifier): String = s"p_${idToStr(id)}"
+
+  override def ksErrorName(err: KSError): String = CCompiler.ksErrorName(err)
+
+  // ##############################
+  // Helper
+  // ##############################
+
+  def getPtrSuffix(dataType: DataType): String = {
+    dataType match {
+      case t: UserType => "*"
+      case at: ArrayType => "*"
+      case KaitaiStructType | CalcKaitaiStructType => "*"
+      case AnyType => "*"
+      case sw: SwitchType => getPtrSuffix(sw.combinedType)
+      case _ => ""
+    }
+  }
+
+  // ##############################
+  // External class handling
+  // ##############################
+
+  override def opaqueClassDeclaration(classSpec: ClassSpec): Unit = {
+    val name = classSpec.name.head.toLowerCase();
+    importListHdr.addLocal(outFileNameHeader(name))
+  }
+
+ override def importFile(file: String): Unit = {
+    val name = file.toLowerCase().split("/").last
+    importListHdr.addLocal(outFileNameHeader(name))
+    outHdrDefs.puts("/* Import */")
+    outHdrDefs.puts(s"#ifndef HAVE_DECL_$name")
+    outHdrDefs.puts(s"#define HAVE_DECL_$name")
+    outHdrDefs.puts(s"typedef struct ksx_${name} ksx_$name;")
+    outHdrDefs.puts(s"#endif")
+    outHdrDefs.puts
+  }
+
+  // ##############################
+  // Class and constructor handling
+  // ##############################
+
   override def fileHeader(topClassName: String): Unit = {
     outSrcHeader.puts(s"/* $headerComment */")
     outSrcHeader.puts
@@ -101,22 +156,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def fileFooter(topClassName: String): Unit = {
     outMethodBody.dec
     outMethodBody.puts("}")
-  }
-
-  override def opaqueClassDeclaration(classSpec: ClassSpec): Unit = {
-    val name = classSpec.name.head.toLowerCase();
-    importListHdr.addLocal(outFileNameHeader(name))
-  }
-
- override def importFile(file: String): Unit = {
-    val name = file.toLowerCase().split("/").last
-    importListHdr.addLocal(outFileNameHeader(name))
-    outHdrDefs.puts("/* Import */")
-    outHdrDefs.puts(s"#ifndef HAVE_DECL_$name")
-    outHdrDefs.puts(s"#define HAVE_DECL_$name")
-    outHdrDefs.puts(s"typedef struct ksx_${name} ksx_$name;")
-    outHdrDefs.puts(s"#endif")
-    outHdrDefs.puts
   }
 
   override def classHeader(name: List[String]): Unit = {
@@ -263,6 +302,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcMain.puts("}")
   }
 
+  // ##############################
+  // Sequence reads
+  // ##############################
+
   override def runRead(name: List[String]): Unit = {
     outSrcMain.puts(s"CHECKV(ksx_read_${currentClassNames.last}_x(root_stream, root_data, stream, data));");
   }
@@ -314,20 +357,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def readFooter(): Unit = makeFooter(false)
 
-  def getPtrSuffix(dataType: DataType): String = {
-    dataType match {
-      case t: UserType => "*"
-      case at: ArrayType => "*"
-      case KaitaiStructType | CalcKaitaiStructType => "*"
-      case AnyType => "*"
-      case sw: SwitchType => getPtrSuffix(sw.combinedType)
-      case _ => ""
-    }
-  }
-
-  override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
-    attributeDeclaration(attrName, attrType, isNullable, false)
-  }
+  // ##############################
+  // Instance handling
+  // ##############################
 
   def handleInstanceReadsCommon(outInstancesRead: StringLanguageOutputWriter, attrName: Identifier, isNullable: Boolean, isArray: Boolean, isCallback: Boolean, expr: String): Unit = {
     val name = idToStr(attrName)
@@ -377,6 +409,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case _ =>
     }
   }
+
   def handleInstanceReads(outInstancesRead: StringLanguageOutputWriter, attrType: DataType, attrName: Identifier, isNullable: Boolean): Unit = {
     val name = idToStr(attrName)
     attrType match {
@@ -395,7 +428,55 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
   }
 
-  def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean, isInstance: Boolean): Unit = {
+  def flagForInstName(ksName: Identifier) = s"_flag_${idToStr(ksName)}"
+
+  override def instanceHeader(classNameList: List[String], instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {
+    val className = makeName(classNameList)
+    val name = privateMemberName(instName)
+
+    outMethodHead.puts(s"static void ksx_read_${className}_instance_${name}(ks_stream* root_stream, ksx_${currentRootName}* root_data, ks_stream* stream, ksx_${className}* data)")
+    outMethodHead.puts("{")
+    outMethodHead.inc
+    outMethodBody.inc
+  }
+
+  override def instanceFooter: Unit = makeFooter(true)
+
+  override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {
+    outMethodHead.puts("int64_t _old_pos = ks_stream_get_pos(stream);")
+    outMethodBody.puts(s"if (data->_internal->${flagForInstName(instName)})")
+    outMethodBody.inc
+    outMethodBody.puts("return;")
+    outMethodBody.dec
+  }
+
+  override def instanceDeclaration(attrName: InstanceIdentifier, attrType: DataType, isNullable: Boolean): Unit = {
+    val outInternalStruct = outHdrInternalStructs.last
+    outInternalStruct.puts(s"ks_bool ${flagForInstName(attrName)};")
+    attributeDeclarationCommon(attrName, attrType, isNullable, true)
+  }
+
+  override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {
+    outMethodBody.puts(s"data->_internal->${flagForInstName(instName)} = 1;")
+  }
+
+  override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {
+    outMethodBody.puts("ks_stream_seek(stream, _old_pos);")
+  }
+
+  override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit = {
+    val name = privateMemberName(instName)
+    val ex = expression(value)
+    outMethodBody.puts(s"data->$name = $ex;")
+  }
+
+  override def instanceClear(instName: InstanceIdentifier): Unit = {}
+
+  // ##############################
+  // Attributes
+  // ##############################
+
+  def attributeDeclarationCommon(attrName: Identifier, attrType: DataType, isNullable: Boolean, isInstance: Boolean): Unit = {
     val outStruct = outHdrStructs.last
     val outInternalStruct = outHdrInternalStructs.last
     val outInstancesFill = outSrcInstancesFillArray.last
@@ -438,7 +519,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcInstancesGet.puts("}")
     outSrcInstancesGet.puts
 
-    var getFunc = funcForInstName(attrName)
+    var getFunc = s"_get_${idToStr(attrName)}"
     outInternalStruct.puts(s"${typeStr} (*$getFunc)(ksx_${currentClassName}* data);")
     outInstancesFill.puts(s"data->_internal->$getFunc = ksx_get_${currentClassName}_${name};")
     if (isInstance) {
@@ -447,9 +528,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     handleInstanceReads(outInstancesRead, attrType, attrName, isNullable)
   }
 
-  override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
+  override def attributeDeclaration(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {
+    attributeDeclarationCommon(attrName, attrType, isNullable, false)
+  }
 
-  override def universalDoc(doc: DocSpec): Unit = {}
+  override def attributeReader(attrName: Identifier, attrType: DataType, isNullable: Boolean): Unit = {}
 
   override def attrParseHybrid(leProc: () => Unit, beProc: () => Unit): Unit = {
     outMethodBody.puts(s"if (data->${privateMemberName(EndianIdentifier)} == 1) {")
@@ -465,6 +548,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def attrFixedContentsParse(attrName: Identifier, contents: String): Unit =
     outMethodBody.puts(s"${privateMemberName(attrName)} = $normalIO.EnsureFixedContents($contents);")
+
+  def getRawIdExpr(varName: Identifier, rep: RepeatSpec): String = {
+    val memberName = privateMemberName(varName)
+    rep match {
+      case NoRepeat => memberName
+      case _ => s"$memberName->data[i]"
+    }
+  }
 
   override def attrProcess(proc: ProcessExpr, varSrc: Identifier, varDest: Identifier, rep: RepeatSpec): Unit = {
     val srcExpr = "_raw_" + privateMemberName(varSrc)
@@ -505,6 +596,77 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
   }
 
+  // ##############################
+  // Validate
+  // ##############################
+
+ override def attrValidateExpr(
+    attrId: Identifier,
+    attrType: DataType,
+    checkExpr: Ast.expr,
+    err: KSError,
+    errArgs: List[Ast.expr]
+  ): Unit = {
+    val typeStr = kaitaiType2NativeType(attrType)
+    val ptr = getPtrSuffix(attrType)
+    val name = privateMemberName(attrId)
+    outMethodBody.puts("{")
+    outMethodBody.inc
+    outMethodBody.puts(s"$typeStr$ptr _temp = data->$name;")
+    outMethodBody.puts(s"(void)_temp;")
+    val errArgsStr = errArgs.map(translator.translate).mkString(", ")
+    outMethodBody.puts(s"if (!(${translator.translate(checkExpr)}))")
+    outMethodBody.puts("{")
+    outMethodBody.inc
+    //outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
+    outMethodBody.puts("CHECK2(1, \"Validation error\", VOID);")
+    outMethodBody.puts(s"return;")
+    outMethodBody.dec
+    outMethodBody.puts("}")
+    outMethodBody.dec
+    outMethodBody.puts("}")
+  }
+
+  // ##############################
+  // Enum
+  // ##############################
+
+  override def enumDeclaration(curClass: List[String], enumName: String, enumColl: Seq[(Long, EnumValueSpec)]): Unit = {
+    val enumPath : ListBuffer[String] = ListBuffer()
+    enumPath.appendAll(curClass)
+    enumPath.append(enumName)
+    val enumClass = makeName(enumPath)
+    val enumClass2 = "ksx_" + enumClass
+
+    outHdrEnums.puts
+    outHdrEnums.puts(s"typedef enum ${enumClass2}_")
+    outHdrEnums.puts(s"{")
+    outHdrEnums.inc
+
+    enumColl.foreach { case (id, label) =>
+      val value = translator.doIntLiteral(id)
+      outHdrEnums.puts(s"${enumClass2.toUpperCase()}_${label.name.toUpperCase()} = $value,")
+    }
+
+    outHdrEnums.dec
+    outHdrEnums.puts(s"} $enumClass2;")
+
+    outHdrArrays.puts
+    outHdrArrays.puts(s"struct ksx_array_${enumClass}")
+    outHdrArrays.puts("{")
+    outHdrArrays.inc
+    outHdrArrays.puts("ks_handle _handle;")
+    outHdrArrays.puts("int64_t size;")
+    outHdrArrays.puts(s"ksx_$enumClass* data;")
+    outHdrArrays.dec
+    outHdrArrays.puts(s"};")
+    outHdrDefs.puts(s"typedef struct ksx_array_${enumClass} ksx_array_$enumClass;")
+  }
+
+  // ##############################
+  // IO
+  // ##############################
+
   override def allocateIO(varName: Identifier, rep: RepeatSpec): String = {
     val privateVarName = privateMemberName(varName)
 
@@ -516,14 +678,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"/* Subtype with substream */")
     outMethodBody.puts(s"$ioName = ks_stream_create_from_bytes(_raw_$args);")
     ioName
-  }
-
-  def getRawIdExpr(varName: Identifier, rep: RepeatSpec): String = {
-    val memberName = privateMemberName(varName)
-    rep match {
-      case NoRepeat => memberName
-      case _ => s"$memberName->data[i]"
-    }
   }
 
   override def useIO(ioEx: expr): String = {
@@ -548,11 +702,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"CHECKV(ks_stream_align_to_byte($io_new));")
   }
 
-  override def instanceClear(instName: InstanceIdentifier): Unit = {}
-
-  override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {
-    outMethodBody.puts(s"data->_internal->${flagForInstName(instName)} = 1;")
-  }
+  // ##############################
+  // Conditional read
+  // ##############################
 
   override def condIfHeader(expr: expr): Unit = {
     outMethodBody.puts(s"if (${expression(expr)}) {")
@@ -572,6 +724,30 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.dec
     outMethodBody.puts("}")
   }
+
+  // ##############################
+  // Assignment helper
+  // ##############################
+
+  override def condRepeatCommonInit(id: Identifier, dataType: DataType, needRaw: NeedRaw): Unit = {
+  }
+
+  def isTypeGeneric(id: Identifier): Boolean = {
+    val currentAttr = typeProvider.nowClass.seq.find(x => idToStr(x.id) == idToStr(id))
+    if (currentAttr.isEmpty) return false;
+    currentAttr.get.dataType match {
+      case t: SwitchType =>
+        t.combinedType match {
+          case KaitaiStructType | AnyType => true
+          case _ => false
+        }
+      case _ => false
+    }
+  }
+
+  // ##############################
+  // Repeat Eos
+  // ##############################
 
   override def condRepeatEosHeader(id: Identifier, io: String, dataType: DataType): Unit = {
     val name = privateMemberName(id)
@@ -613,6 +789,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
   }
 
+  // ##############################
+  // Repeat Expr
+  // ##############################
+
   override def condRepeatExprHeader(id: Identifier, io: String, dataType: DataType, repeatExpr: expr): Unit = {
     val pos = translator.doName(Identifier.INDEX)
     val len = expression(repeatExpr)
@@ -642,8 +822,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     fileFooter(null)
   }
 
-  override def condRepeatCommonInit(id: Identifier, dataType: DataType, needRaw: NeedRaw): Unit = {
-  }
+  // ##############################
+  // Repeat Until
+  // ##############################
 
   override def condRepeatUntilHeader(id: Identifier, io: String, dataType: DataType, untilExpr: expr): Unit = {
     val pos = translator.doName(Identifier.INDEX)
@@ -698,22 +879,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
   }
 
+  // ##############################
+  // Assignment
+  // ##############################
+
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit = {
     handleAssignmentC(id, dataTypeLast, assignTypeLast, ioLast, defEndianLast, expr, false)
   }
 
-  def isTypeGeneric(id: Identifier): Boolean = {
-    val currentAttr = typeProvider.nowClass.seq.find(x => idToStr(x.id) == idToStr(id))
-    if (currentAttr.isEmpty) return false;
-    currentAttr.get.dataType match {
-      case t: SwitchType =>
-        t.combinedType match {
-          case KaitaiStructType | AnyType => true
-          case _ => false
-        }
-      case _ => false
-    }
-  }
   def handleAssignmentC(id: Identifier, dataType: DataType, assignType: DataType, io: String, defEndian: Option[FixedEndian], expr: String, isArray: Boolean)
   {
     // TODO: Use io!
@@ -805,6 +978,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   override def handleAssignmentTempVar(dataType: DataType, id: String, expr: String): Unit = {}
 
+  // ##############################
+  // Expression handling
+  // ##############################
+
   override def blockScopeHeader: Unit = {
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -839,16 +1016,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     expr2
   }
 
-  override def userTypeDebugRead(id: String, dataType: DataType, assignType: DataType): Unit = {}
+  // ##############################
+  // Switch (normal)
+  // ##############################
 
   override def switchRequiresIfs(onType: DataType): Boolean = onType match {
     case _: IntType | _: EnumType => false
     case _ => true
   }
-
-  //<editor-fold desc="switching: true version">
-
-  val NAME_SWITCH_ON = Ast.expr.Name(Ast.identifier(Identifier.SWITCH_ON))
 
   var outMethodHeadOldSwitch: StringLanguageOutputWriter = null
   var outMethodBodyOldSwitch: StringLanguageOutputWriter = null
@@ -904,9 +1079,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
   }
 
-  //</editor-fold>
+  // ##############################
+  // Switch (if)
+  // ##############################
 
-  //<editor-fold desc="switching: emulation with ifs">
+  val NAME_SWITCH_ON = Ast.expr.Name(Ast.identifier(Identifier.SWITCH_ON))
 
   override def switchIfStart(id: Identifier, on: Ast.expr, onType: DataType): Unit = {
     outMethodBody.puts("{")
@@ -955,118 +1132,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts("}")
   }
 
-  //</editor-fold>
-  def flagForInstName(ksName: Identifier) = s"_flag_${idToStr(ksName)}"
-  def funcForInstName(ksName: Identifier) = s"_get_${idToStr(ksName)}"
+  // ##############################
+  // Other
+  // ##############################
 
-  override def instanceDeclaration(attrName: InstanceIdentifier, attrType: DataType, isNullable: Boolean): Unit = {
-    val outInternalStruct = outHdrInternalStructs.last
-    outInternalStruct.puts(s"ks_bool ${flagForInstName(attrName)};")
-    attributeDeclaration(attrName, attrType, isNullable, true)
-  }
+  override def userTypeDebugRead(id: String, dataType: DataType, assignType: DataType): Unit = {}
 
-  override def instanceHeader(classNameList: List[String], instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {
-    val className = makeName(classNameList)
-    val name = privateMemberName(instName)
+  override def universalDoc(doc: DocSpec): Unit = {}
 
-    outMethodHead.puts(s"static void ksx_read_${className}_instance_${name}(ks_stream* root_stream, ksx_${currentRootName}* root_data, ks_stream* stream, ksx_${className}* data)")
-    outMethodHead.puts("{")
-    outMethodHead.inc
-    outMethodBody.inc
-  }
-
-  override def instanceFooter: Unit = makeFooter(true)
-
-  override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {
-    outMethodHead.puts("int64_t _old_pos = ks_stream_get_pos(stream);")
-    outMethodBody.puts(s"if (data->_internal->${flagForInstName(instName)})")
-    outMethodBody.inc
-    outMethodBody.puts("return;")
-    outMethodBody.dec
-  }
-
-  override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {
-    outMethodBody.puts("ks_stream_seek(stream, _old_pos);")
-  }
-
-  override def instanceCalculate(instName: Identifier, dataType: DataType, value: expr): Unit = {
-    val name = privateMemberName(instName)
-    val ex = expression(value)
-    outMethodBody.puts(s"data->$name = $ex;")
-  }
-
-  override def enumDeclaration(curClass: List[String], enumName: String, enumColl: Seq[(Long, EnumValueSpec)]): Unit = {
-    val enumPath : ListBuffer[String] = ListBuffer()
-    enumPath.appendAll(curClass)
-    enumPath.append(enumName)
-    val enumClass = makeName(enumPath)
-    val enumClass2 = "ksx_" + enumClass
-
-    outHdrEnums.puts
-    outHdrEnums.puts(s"typedef enum ${enumClass2}_")
-    outHdrEnums.puts(s"{")
-    outHdrEnums.inc
-
-    enumColl.foreach { case (id, label) =>
-      val value = translator.doIntLiteral(id)
-      outHdrEnums.puts(s"${enumClass2.toUpperCase()}_${label.name.toUpperCase()} = $value,")
-    }
-
-    outHdrEnums.dec
-    outHdrEnums.puts(s"} $enumClass2;")
-
-    outHdrArrays.puts
-    outHdrArrays.puts(s"struct ksx_array_${enumClass}")
-    outHdrArrays.puts("{")
-    outHdrArrays.inc
-    outHdrArrays.puts("ks_handle _handle;")
-    outHdrArrays.puts("int64_t size;")
-    outHdrArrays.puts(s"ksx_$enumClass* data;")
-    outHdrArrays.dec
-    outHdrArrays.puts(s"};")
-    outHdrDefs.puts(s"typedef struct ksx_array_${enumClass} ksx_array_$enumClass;")
-  }
-
-  def idToStr(id: Identifier): String = CCompiler.idToStr(id)
-
-  def publicMemberName(id: Identifier): String = idToStr(id)
-
-  override def privateMemberName(id: Identifier): String = s"${idToStr(id)}"
-
-  override def localTemporaryName(id: Identifier): String = s"_t_${idToStr(id)}"
-
-  override def paramName(id: Identifier): String = s"p_${idToStr(id)}"
-
-  override def ksErrorName(err: KSError): String = CCompiler.ksErrorName(err)
-
-  override def attrValidateExpr(
-    attrId: Identifier,
-    attrType: DataType,
-    checkExpr: Ast.expr,
-    err: KSError,
-    errArgs: List[Ast.expr]
-  ): Unit = {
-    val typeStr = kaitaiType2NativeType(attrType)
-    val ptr = getPtrSuffix(attrType)
-    val name = privateMemberName(attrId)
-    outMethodBody.puts("{")
-    outMethodBody.inc
-    outMethodBody.puts(s"$typeStr$ptr _temp = data->$name;")
-    outMethodBody.puts(s"(void)_temp;")
-    val errArgsStr = errArgs.map(translator.translate).mkString(", ")
-    outMethodBody.puts(s"if (!(${translator.translate(checkExpr)}))")
-    outMethodBody.puts("{")
-    outMethodBody.inc
-    //outMethodBody.puts(s"throw new ${ksErrorName(err)}($errArgsStr);")
-    outMethodBody.puts("CHECK2(1, \"Validation error\", VOID);")
-    outMethodBody.puts(s"return;")
-    outMethodBody.dec
-    outMethodBody.puts("}")
-    outMethodBody.dec
-    outMethodBody.puts("}")
-  }
   override def type2class(className: String): String =
     className
+
 }
 
 object CCompiler extends LanguageCompilerStatic
@@ -1167,6 +1243,7 @@ object CCompiler extends LanguageCompilerStatic
 
   def types2class(typeName: Ast.typeId): String =
     types2class(typeName.names)
+
   def types2class(names: Iterable[String]) = names.map(type2class).mkString(".").toLowerCase()
 
   def makeName(names: Iterable[String]) = {
