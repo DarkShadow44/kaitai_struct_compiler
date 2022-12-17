@@ -46,6 +46,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   val outSrcInternalStruct =  new StringLanguageOutputWriter(indent)
   val outHdrStructs : ListBuffer[StringLanguageOutputWriter] = ListBuffer()
   var outMethodHasI = false
+  var outMethodHasInternal = false
 
   def printdbg(s: String) : Unit = outMethodBody.puts("//" + s)
 
@@ -192,7 +193,6 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outStruct.puts("{")
     outStruct.inc
     outStruct.puts("ks_handle _handle;")
-    outStruct.puts(s"ksx_${className}_internal* _internal;")
     outHdrDefs.puts(s"typedef struct ksx_${className}_internal ksx_${className}_internal;")
 
     outInternalStruct.puts(s"struct ksx_${className}_internal")
@@ -203,6 +203,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesFill.puts(s"static void ksx_fill_${className}_instances(ksx_${className}* data)")
     outInstancesFill.puts("{")
     outInstancesFill.inc
+    outInstancesFill.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)data->_handle.internal_read;")
+    outInstancesFill.puts(s"(void)internal;")
 
     outSrcDefs.puts(s"static void* ksx_read_${className}_instances(ksx_${className}* data);")
     outInstancesRead.puts(s"static void* ksx_read_${className}_instances(ksx_${className}* data)")
@@ -210,8 +212,10 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.inc
     outInstancesRead.puts("int64_t i;")
     outInstancesRead.puts("ks_stream* stream = data->_handle.stream;")
+    outInstancesRead.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)data->_handle.internal_read;")
     outInstancesRead.puts("(void)i;")
     outInstancesRead.puts("(void)stream;")
+    outInstancesRead.puts("(void)internal;")
   }
 
   override def classFooter(name: List[String]): Unit = {
@@ -246,6 +250,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def classConstructorHeader(name: List[String], parentType: DataType, rootClassName: List[String], isHybrid: Boolean, params: List[ParamDefSpec]): Unit = {
     val className = makeName(name)
     currentClassNames.append(className)
+    translator.setCurrentClass(className)
     val rootName = makeName(rootClassName)
     currentRootName = rootName
     val parentName = kaitaiType2NativeType(parentType)
@@ -287,7 +292,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     )
 
     outSrcMain.puts(s"data->_parent = ($parentName*)parent_data;")
-    outSrcMain.puts(s"data->_internal = calloc(1, sizeof(ksx_${className}_internal));")
+    outSrcMain.puts(s"data->_handle.internal_read = calloc(1, sizeof(ksx_${className}_internal));")
     outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
 
     typeProvider.nowClass.meta.endian match {
@@ -348,11 +353,15 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
   def makeFooter(instance: Boolean) : Unit = {
     val outSrc = if (instance) outSrcInstances else outSrcMain
-    if (outMethodHasI)
-    {
+    if (outMethodHasI) {
       val index = translator.doName(Identifier.INDEX)
       outMethodHead.puts(s"int64_t $index;")
       outMethodHasI = false
+    }
+    if (outMethodHasInternal) {
+      val className = currentClassNames.last
+      outMethodHead.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)data->_handle.internal_read;")
+      outMethodHasInternal = false
     }
     outSrc.add(outMethodHead)
     if (outMethodHead.result != "") {
@@ -386,7 +395,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
      if (isCallback) {
       val arr = if (isArray) "[i]" else ""
-      outInstancesRead.puts(s"if (data->_internal->_read_instances_$name$arr)")
+      outInstancesRead.puts(s"if (internal->_read_instances_$name$arr)")
       outInstancesRead.puts("{")
       outInstancesRead.inc
     }
@@ -413,7 +422,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         val typename = makeName(t.classSpec.get.name)
         handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, true, false, s"CHECKV(ksx_read_${typename}_instances(data->$name->data[i]));")
       case AnyType =>
-        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, true, true, s"CHECKV(data->_internal->_read_instances_$name[i](((void**)data->$name->data)[i]));")
+        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, true, true, s"CHECKV(internal->_read_instances_$name[i](((void**)data->$name->data)[i]));")
         val outInternalStruct = outHdrInternalStructs.last
         outInternalStruct.puts(s"ks_callback* _read_instances_$name;")
       case st: SwitchType => handleInstanceReadsArray(outInstancesRead, st.combinedType, attrName, isNullable)
@@ -431,7 +440,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       case at: ArrayType =>
         handleInstanceReadsArray(outInstancesRead, at.elType, attrName, isNullable)
       case KaitaiStructType | AnyType =>
-        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, false, true, s"CHECKV(data->_internal->_read_instances_$name(data->$name));")
+        handleInstanceReadsCommon(outInstancesRead, attrName, isNullable, false, true, s"CHECKV(internal->_read_instances_$name(data->$name));")
         val outInternalStruct = outHdrInternalStructs.last
         outInternalStruct.puts(s"ks_callback _read_instances_$name;")
       case st: SwitchType => handleInstanceReads(outInstancesRead, st.combinedType, attrName, isNullable)
@@ -444,6 +453,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def instanceHeader(classNameList: List[String], instName: InstanceIdentifier, dataType: DataType, isNullable: Boolean): Unit = {
     val className = makeName(classNameList)
     val name = privateMemberName(instName)
+    translator.setCurrentClass(className)
 
     outMethodHead.puts(s"static void* ksx_read_${className}_instance_${name}(ks_stream* root_stream, ksx_${currentRootName}* root_data, ks_stream* stream, ksx_${className}* data)")
     outMethodHead.puts("{")
@@ -454,8 +464,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def instanceFooter: Unit = makeFooter(true)
 
   override def instanceCheckCacheAndReturn(instName: InstanceIdentifier, dataType: DataType): Unit = {
+    outMethodHasInternal = true
     outMethodHead.puts("int64_t _old_pos = ks_stream_get_pos(stream);")
-    outMethodBody.puts(s"if (data->_internal->${flagForInstName(instName)})")
+    outMethodBody.puts(s"if (internal->${flagForInstName(instName)})")
     outMethodBody.inc
     outMethodBody.puts("return data;")
     outMethodBody.dec
@@ -468,7 +479,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   override def instanceSetCalculated(instName: InstanceIdentifier): Unit = {
-    outMethodBody.puts(s"data->_internal->${flagForInstName(instName)} = 1;")
+    outMethodHasInternal = true
+    outMethodBody.puts(s"internal->${flagForInstName(instName)} = 1;")
   }
 
   override def instanceReturn(instName: InstanceIdentifier, attrType: DataType): Unit = {
@@ -529,9 +541,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     var getFunc = s"_get_${idToStr(attrName)}"
     outInternalStruct.puts(s"${typeStr} (*$getFunc)(ksx_${currentClassName}* data);")
-    outInstancesFill.puts(s"data->_internal->$getFunc = ksx_get_${currentClassName}_${name};")
+    outInstancesFill.puts(s"internal->$getFunc = ksx_get_${currentClassName}_${name};")
     if (isInstance) {
-      outInstancesRead.puts(s"data->_internal->$getFunc(data);")
+      outInstancesRead.puts(s"internal->$getFunc(data);")
     }
     handleInstanceReads(outInstancesRead, attrType, attrName, isNullable)
   }
@@ -783,8 +795,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
     if (isTypeGeneric(id)) {
-      outMethodBody.puts(s"data->_internal->_read_instances_$name = realloc(data->_internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
-      outMethodBody.puts(s"data->_internal->_read_instances_$name[data->$name->size -1] = 0;")
+      outMethodHasInternal = true
+      outMethodBody.puts(s"internal->_read_instances_$name = realloc(internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
+      outMethodBody.puts(s"internal->_read_instances_$name[data->$name->size -1] = 0;")
     }
     handleAssignmentCommon(id, expr, true)
   }
@@ -813,7 +826,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name->size = $len;")
     outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}$ptr), data->$name->size);")
     if (isTypeGeneric(id)) {
-      outMethodBody.puts(s"data->_internal->_read_instances_$name = calloc(sizeof(ks_callback), data->$name->size);")
+      outMethodHasInternal = true
+      outMethodBody.puts(s"internal->_read_instances_$name = calloc(sizeof(ks_callback), data->$name->size);")
     }
     outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
@@ -867,8 +881,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
     if (isTypeGeneric(id)) {
-      outMethodBody.puts(s"data->_internal->_read_instances_$name = realloc(data->_internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
-      outMethodBody.puts(s"data->_internal->_read_instances_$name[data->$name->size -1] = 0;")
+      outMethodHasInternal = true
+      outMethodBody.puts(s"internal->_read_instances_$name = realloc(internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
+      outMethodBody.puts(s"internal->_read_instances_$name[data->$name->size -1] = 0;")
     }
     handleAssignmentCommon(id, expr, true)
     val pos = translator.doName(Identifier.INDEX)
@@ -914,7 +929,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
           val typeName = makeName(t.classSpec.get.name)
           val arr = if (isArray) "[i]" else ""
           outMethodBody.puts(s"CHECKV(data->$nameTarget = (ks_usertype_generic*)$expr);")
-          outMethodBody.puts(s"data->_internal->_read_instances_$name$arr = (void*)ksx_read_${typeName}_instances;")
+          outMethodHasInternal = true
+          outMethodBody.puts(s"internal->_read_instances_$name$arr = (void*)ksx_read_${typeName}_instances;")
           return
         }
       case _ =>

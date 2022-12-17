@@ -11,6 +11,12 @@ import io.kaitai.struct.languages.CCompiler
 import io.kaitai.struct.languages.components.CppImportList
 
 class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal: Boolean) extends BaseTranslator(provider) {
+
+  var currentClassName = ""
+
+  def setCurrentClass(className: String): Unit =
+    currentClassName = className
+
   def doArrayLiteralInternal(t: DataType, value: Seq[expr]): String = {
     val size = value.size
     val args = value.map(translate).mkString(", ")
@@ -106,7 +112,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
       }
     } else {
       if (isInternal) {
-         s"FIELD(data, $s)"
+         s"FIELD(data, ksx_$currentClassName, $s)"
       } else {
          s"data->$s"
       }
@@ -238,9 +244,10 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
         if (t.isOpaque) {
           s"${translate(value)}->$attrName"
         } else {
-          s"FIELD(${translate(value)}, $attrName)"
+          val typeStr = CCompiler.kaitaiType2NativeType(t)
+          s"FIELD(${translate(value)}, $typeStr, $attrName)"
         }
-      case _ => s"FIELD(${translate(value)}, $attrName)"
+      case _ => s"ERROR Type"
     }
   }
   override def strConcat(left: Ast.expr, right: Ast.expr): String = s"ks_string_concat(${translate(left)}, ${translate(right)})"
