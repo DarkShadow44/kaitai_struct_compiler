@@ -259,17 +259,17 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val addParams = Utils.join(params.map(p => paramName(p.id)), ", ", ", ", "")
     if (outHdrStructs.length == 1) {
       outHdr.puts
-      outHdr.puts(s"ksx_${className}* ksx_read_${className}_from_stream(ks_stream* stream, int* err$paramsArg);")
+      outHdr.puts(s"ksx_${className}* ksx_read_${className}_from_stream(ks_stream* stream, ks_error* error$paramsArg);")
       outSrcMain.puts
-      outSrcMain.puts(s"ksx_${className}* ksx_read_${className}_from_stream(ks_stream* stream, int* err$paramsArg)")
+      outSrcMain.puts(s"ksx_${className}* ksx_read_${className}_from_stream(ks_stream* stream, ks_error* error$paramsArg)")
       outSrcMain.puts("{")
       outSrcMain.inc
       outSrcMain.puts(s"ksx_${className}* data;")
       outSrcMain.puts(s"data = ksx_read_$className(stream, 0, 0, stream$addParams);")
-      outSrcMain.puts(s"if (err) *err = *stream->err;")
+      outSrcMain.puts(s"if (error) *error = stream->config->error;")
       outSrcMain.puts(s"CHECKV();")
       outSrcMain.puts(s"ksx_read_${className}_instances(data);")
-      outSrcMain.puts(s"if (err) *err = *stream->err;")
+      outSrcMain.puts(s"if (error) *error = stream->config->error;")
       outSrcMain.puts(s"CHECKV();")
       outSrcMain.puts(s"return data;")
       outSrcMain.dec

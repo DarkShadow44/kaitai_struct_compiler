@@ -21,23 +21,23 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
     val size = value.size
     val args = value.map(translate).mkString(", ")
     t match {
-      case Int1Type(false) => s"ks_array_uint8_t_from_data($size, $args)"
-      case IntMultiType(false, Width2, _) => s"ks_array_uint16_t_from_data($size, $args)"
-      case IntMultiType(false, Width4, _) => s"ks_array_uint32_t_from_data($size, $args)"
-      case IntMultiType(false, Width8, _) => s"ks_array_uint64_t_from_data($size, $args)"
+      case Int1Type(false) => s"ks_array_uint8_t_from_data(stream->config, $size, $args)"
+      case IntMultiType(false, Width2, _) => s"ks_array_uint16_t_from_data(stream->config, $size, $args)"
+      case IntMultiType(false, Width4, _) => s"ks_array_uint32_t_from_data(stream->config, $size, $args)"
+      case IntMultiType(false, Width8, _) => s"ks_array_uint64_t_from_data(stream->config, $size, $args)"
 
-      case Int1Type(true) => s"ks_array_int8_t_from_data($size, $args)"
-      case IntMultiType(true, Width2, _) => s"ks_array_int16_t_from_data($size, $args)"
-      case IntMultiType(true, Width4, _) => s"ks_array_int32_t_from_data($size, $args)"
-      case IntMultiType(true, Width8, _) => s"ks_array_int64_t_from_data($size, $args)"
+      case Int1Type(true) => s"ks_array_int8_t_from_data(stream->config, $size, $args)"
+      case IntMultiType(true, Width2, _) => s"ks_array_int16_t_from_data(stream->config, $size, $args)"
+      case IntMultiType(true, Width4, _) => s"ks_array_int32_t_from_data(stream->config, $size, $args)"
+      case IntMultiType(true, Width8, _) => s"ks_array_int64_t_from_data(stream->config, $size, $args)"
 
-      case FloatMultiType(Width4, _) => s"ks_array_float_from_data($size, $args)"
-      case FloatMultiType(Width8, _) => s"ks_array_double_from_data($size, $args)"
+      case FloatMultiType(Width4, _) => s"ks_array_float_from_data(stream->config, $size, $args)"
+      case FloatMultiType(Width8, _) => s"ks_array_double_from_data(stream->config, $size, $args)"
 
-      case CalcIntType => s"ks_array_int64_t_from_data($size, $args)"
-      case CalcFloatType => s"ks_array_double_from_data($size, $args)"
-      case CalcStrType => s"ks_array_string_from_data($size, $args)"
-      case KaitaiStructType | CalcKaitaiStructType => s"ks_array_usertype_generic_from_data($size, $args)"
+      case CalcIntType => s"ks_array_int64_t_from_data(stream->config, $size, $args)"
+      case CalcFloatType => s"ks_array_double_from_data(stream->config, $size, $args)"
+      case CalcStrType => s"ks_array_string_from_data(stream->config, $size, $args)"
+      case KaitaiStructType | CalcKaitaiStructType => s"ks_array_usertype_generic_from_data(stream->config, $size, $args)"
       case _ => s"Missing list type: " + t.toString()
     }
   }
@@ -49,15 +49,15 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
   }
 
   override def doByteArrayLiteral(arr: Seq[Byte]): String = {
-    val stream = if (isInternal) "stream" else "0"
+    val config = if (isInternal) "stream->config" else "config"
     if (arr.size == 0) {
-      s"ks_bytes_from_data($stream, 0)"
+      s"ks_bytes_from_data($config, 0)"
     } else {
-      s"ks_bytes_from_data($stream, ${arr.size}, ${arr.map(_ & 0xff).mkString(", ")})"
+      s"ks_bytes_from_data($config, ${arr.size}, ${arr.map(_ & 0xff).mkString(", ")})"
     }
   }
   override def doByteArrayNonLiteral(elts: Seq[Ast.expr]): String =
-    s"ks_bytes_from_data_terminated(stream, ${elts.map(translate).mkString(", ")}, 0xffff)"
+    s"ks_bytes_from_data_terminated(stream->config, ${elts.map(translate).mkString(", ")}, 0xffff)"
 
   override val asciiCharQuoteMap: Map[Char, String] = Map(
     '\t' -> "\\t",
@@ -164,7 +164,7 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
   override def floatToInt(v: expr): String =
     s"(long) (${translate(v)})"
   override def intToStr(i: expr, base: expr): String = {
-    s"ks_string_from_int(${translate(i)}, ${translate(base)})"
+    s"ks_string_from_int(stream->config, ${translate(i)}, ${translate(base)})"
   }
   override def bytesToStr(bytesExpr: String, encoding: Ast.expr): String =
     s"ks_string_from_bytes($bytesExpr, ${translate(encoding)})"
@@ -183,7 +183,7 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
   }
 
   override def doStringLiteral(s: String): String = {
-    s"ks_string_from_cstr(${super.doStringLiteral(s)})"
+    s"ks_string_from_cstr(stream->config, ${super.doStringLiteral(s)})"
   }
 
   override def bytesFirst(b: Ast.expr): String =
