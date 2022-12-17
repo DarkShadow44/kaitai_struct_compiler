@@ -1,6 +1,6 @@
 package io.kaitai.struct.translators
 
-import io.kaitai.struct.{ImportList, Utils}
+import io.kaitai.struct.{ImportList, Utils, ClassTypeProvider}
 import io.kaitai.struct.datatype._
 import io.kaitai.struct.datatype.DataType._
 import io.kaitai.struct.exprlang.Ast
@@ -10,7 +10,7 @@ import io.kaitai.struct.format.SpecialIdentifier
 import io.kaitai.struct.languages.CCompiler
 import io.kaitai.struct.languages.components.CppImportList
 
-class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal: Boolean) extends BaseTranslator(provider) {
+class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInternal: Boolean) extends BaseTranslator(provider) {
 
   var currentClassName = ""
 
@@ -105,7 +105,7 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
         case Identifier.IO => "stream"
-        case Identifier.PARENT => "data->_parent"
+        case Identifier.PARENT => "data->_handle.parent"
         case Identifier.ROOT => "root_data"
         case Identifier.ITERATOR => "_temp"
         case _ => s"data->$s"
@@ -235,13 +235,16 @@ class CTranslator(provider: TypeProvider, importList: CppImportList, isInternal:
     {
       return s"${translate(value)}->_handle.stream"
     }
-    if (attrName == "_parent" || !isInternal) {
+    if (attrName == "_parent") {
+      return s"${translate(value)}->_handle.parent"
+    }
+    if (!isInternal) {
       return s"${translate(value)}->$attrName"
     }
     val dataType = detectType(value)
     dataType match {
       case t: UserType =>
-        if (t.isOpaque) {
+        if (t.isOpaque && t.classSpec.get != provider.topClass) { // Our own top class is *not* opaque!
           s"${translate(value)}->$attrName"
         } else {
           val typeStr = CCompiler.kaitaiType2NativeType(t)

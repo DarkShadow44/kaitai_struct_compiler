@@ -286,12 +286,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outSrcMain.puts(s"root_data = root_data != 0 ? root_data : data;")
     }
     outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_${className})));")
-    outStruct.puts(s"$parentName* _parent;")
     params.foreach((p) =>
       outSrcMain.puts(s"data->${idToStr(p.id)} = ${paramName(p.id)};")
     )
 
-    outSrcMain.puts(s"data->_parent = ($parentName*)parent_data;")
+    outSrcMain.puts(s"data->_handle.parent = (ks_usertype_generic*)parent_data;")
     outSrcMain.puts(s"data->_handle.internal_read = calloc(1, sizeof(ksx_${className}_internal));")
     outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
 
