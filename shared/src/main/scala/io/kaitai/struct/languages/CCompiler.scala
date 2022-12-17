@@ -180,7 +180,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outHdrArrays.puts(s"struct ksx_array_${className}")
       outHdrArrays.puts("{")
       outHdrArrays.inc
-      outHdrArrays.puts("ks_handle _handle;")
+      outHdrArrays.puts("ks_usertype_generic kaitai_base;")
       outHdrArrays.puts("int64_t size;")
       outHdrArrays.puts(s"ksx_$className** data;")
       outHdrArrays.dec
@@ -192,7 +192,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outStruct.puts(s"struct ksx_${className}")
     outStruct.puts("{")
     outStruct.inc
-    outStruct.puts("ks_handle _handle;")
+    outStruct.puts("ks_usertype_generic kaitai_base;")
     outHdrDefs.puts(s"typedef struct ksx_${className}_internal ksx_${className}_internal;")
 
     outInternalStruct.puts(s"struct ksx_${className}_internal")
@@ -203,7 +203,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesFill.puts(s"static void ksx_fill_${className}_instances(ksx_${className}* data)")
     outInstancesFill.puts("{")
     outInstancesFill.inc
-    outInstancesFill.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)data->_handle.internal_read;")
+    outInstancesFill.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)HANDLE(data)->internal_read;")
     outInstancesFill.puts(s"(void)internal;")
 
     outSrcDefs.puts(s"static void* ksx_read_${className}_instances(ksx_${className}* data);")
@@ -211,8 +211,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outInstancesRead.puts("{")
     outInstancesRead.inc
     outInstancesRead.puts("int64_t i;")
-    outInstancesRead.puts("ks_stream* stream = data->_handle.stream;")
-    outInstancesRead.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)data->_handle.internal_read;")
+    outInstancesRead.puts("ks_stream* stream = HANDLE(data)->stream;")
+    outInstancesRead.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)HANDLE(data)->internal_read;")
     outInstancesRead.puts("(void)i;")
     outInstancesRead.puts("(void)stream;")
     outInstancesRead.puts("(void)internal;")
@@ -285,13 +285,13 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     if (rootName == className) {
       outSrcMain.puts(s"root_data = root_data != 0 ? root_data : data;")
     }
-    outSrcMain.puts(s"CHECKV(data->_handle = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_${className})));")
+    outSrcMain.puts(s"CHECKV(HANDLE(data) = ks_handle_create(stream, data, KS_TYPE_USERTYPE, sizeof(ksx_${className})));")
     params.foreach((p) =>
       outSrcMain.puts(s"data->${idToStr(p.id)} = ${paramName(p.id)};")
     )
 
-    outSrcMain.puts(s"data->_handle.parent = (ks_usertype_generic*)parent_data;")
-    outSrcMain.puts(s"data->_handle.internal_read = calloc(1, sizeof(ksx_${className}_internal));")
+    outSrcMain.puts(s"HANDLE(data)->parent = (ks_usertype_generic*)parent_data;")
+    outSrcMain.puts(s"HANDLE(data)->internal_read = calloc(1, sizeof(ksx_${className}_internal));")
     outSrcMain.puts(s"ksx_fill_${className}_instances(data);")
 
     typeProvider.nowClass.meta.endian match {
@@ -359,7 +359,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     }
     if (outMethodHasInternal) {
       val className = currentClassNames.last
-      outMethodHead.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)data->_handle.internal_read;")
+      outMethodHead.puts(s"ksx_${className}_internal* internal = (ksx_${className}_internal*)HANDLE(data)->internal_read;")
       outMethodHasInternal = false
     }
     outSrc.add(outMethodHead)
@@ -524,7 +524,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outSrcInstancesGet.puts("{")
     outSrcInstancesGet.inc
     if (isInstance) {
-      outSrcInstancesGet.puts(s"ks_stream* stream = data->_handle.stream;")
+      outSrcInstancesGet.puts(s"ks_stream* stream = HANDLE(data)->stream;")
       outSrcInstancesGet.puts(s"CHECK(ksx_read_${currentClassName}_instance_${name}(ks_stream_get_root(stream), (void*)ks_usertype_get_root((void*)data), stream, data), data->$name);")
     }
     attrType match {
@@ -667,7 +667,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outHdrArrays.puts(s"struct ksx_array_${enumClass}")
     outHdrArrays.puts("{")
     outHdrArrays.inc
-    outHdrArrays.puts("ks_handle _handle;")
+    outHdrArrays.puts("ks_usertype_generic kaitai_base;")
     outHdrArrays.puts("int64_t size;")
     outHdrArrays.puts(s"ksx_$enumClass* data;")
     outHdrArrays.dec
@@ -778,7 +778,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
-    outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECKV(HANDLE(data->$name) = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"while (!ks_stream_is_eof($io_new)) {")
@@ -828,7 +828,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outMethodHasInternal = true
       outMethodBody.puts(s"internal->_read_instances_$name = calloc(sizeof(ks_callback), data->$name->size);")
     }
-    outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECKV(HANDLE(data->$name) = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
     outMethodBody.puts("{")
     outMethodBody.inc
@@ -856,7 +856,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
-    outMethodBody.puts(s"CHECKV(data->$name->_handle = ks_handle_create(stream, data->$name, $arrayTypeSize));");
+    outMethodBody.puts(s"CHECKV(HANDLE(data->$name) = ks_handle_create(stream, data->$name, $arrayTypeSize));");
     outMethodBody.puts("{")
     outMethodBody.inc
     outMethodBody.puts(s"${kaitaiType2NativeType(dataType)}$ptr ${translator.doName("_")} = {0};")

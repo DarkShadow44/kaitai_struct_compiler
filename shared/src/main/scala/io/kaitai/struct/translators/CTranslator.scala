@@ -105,7 +105,7 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
         case Identifier.SWITCH_ON => "on"
         case Identifier.INDEX => "i"
         case Identifier.IO => "stream"
-        case Identifier.PARENT => "data->_handle.parent"
+        case Identifier.PARENT => "HANDLE(data)->parent"
         case Identifier.ROOT => "root_data"
         case Identifier.ITERATOR => "_temp"
         case _ => s"data->$s"
@@ -204,10 +204,10 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
    typeArray match {
       case t : ArrayType =>
         t.elType match {
-          case _ : IntType => s"ks_array_min_int(&$res->_handle)"
-          case _ : FloatType => s"ks_array_min_float(&$res->_handle)"
-          case _ : StrType => s"ks_array_min_string(&$res->_handle)"
-          case _ : BytesType => s"ks_array_min_bytes(&$res->_handle)"
+          case _ : IntType => s"ks_array_min_int(&$res->kaitai_base)"
+          case _ : FloatType => s"ks_array_min_float(&$res->kaitai_base)"
+          case _ : StrType => s"ks_array_min_string(&$res->kaitai_base)"
+          case _ : BytesType => s"ks_array_min_bytes(&$res->kaitai_base)"
           case _ => "UNKNOWN_Min: " + t.toString()
         }
       case _ : BytesType => s"ks_bytes_min($res)"
@@ -220,10 +220,10 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
     typeArray match {
       case t : ArrayType =>
         t.elType match {
-          case _ : IntType => s"ks_array_max_int(&$res->_handle)"
-          case _ : FloatType => s"ks_array_max_float(&$res->_handle)"
-          case _ : StrType => s"ks_array_max_string(&$res->_handle)"
-          case _ : BytesType => s"ks_array_max_bytes(&$res->_handle)"
+          case _ : IntType => s"ks_array_max_int(&$res->kaitai_base)"
+          case _ : FloatType => s"ks_array_max_float(&$res->kaitai_base)"
+          case _ : StrType => s"ks_array_max_string(&$res->kaitai_base)"
+          case _ : BytesType => s"ks_array_max_bytes(&$res->kaitai_base)"
           case _ => "UNKNOWN_Max: " + t.toString()
         }
       case _ : BytesType => s"ks_bytes_max($res)"
@@ -233,10 +233,10 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
   override def anyField(value: expr, attrName: String): String = {
     if (attrName == "_io")
     {
-      return s"${translate(value)}->_handle.stream"
+      return s"HANDLE(${translate(value)})->stream"
     }
     if (attrName == "_parent") {
-      return s"${translate(value)}->_handle.parent"
+      return s"HANDLE(${translate(value)})->parent"
     }
     if (!isInternal) {
       return s"${translate(value)}->$attrName"
