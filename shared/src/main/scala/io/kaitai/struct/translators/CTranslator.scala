@@ -21,6 +21,19 @@ class CTranslator(provider: ClassTypeProvider, importList: CppImportList, isInte
     val size = value.size
     val args = value.map(translate).mkString(", ")
     t match {
+      case Int1Type(false) => s"ks_array_uint8_t_from_data($size, $args)"
+      case IntMultiType(false, Width2, _) => s"ks_array_uint16_t_from_data($size, $args)"
+      case IntMultiType(false, Width4, _) => s"ks_array_uint32_t_from_data($size, $args)"
+      case IntMultiType(false, Width8, _) => s"ks_array_uint64_t_from_data($size, $args)"
+
+      case Int1Type(true) => s"ks_array_int8_t_from_data($size, $args)"
+      case IntMultiType(true, Width2, _) => s"ks_array_int16_t_from_data($size, $args)"
+      case IntMultiType(true, Width4, _) => s"ks_array_int32_t_from_data($size, $args)"
+      case IntMultiType(true, Width8, _) => s"ks_array_int64_t_from_data($size, $args)"
+
+      case FloatMultiType(Width4, _) => s"ks_array_float_from_data($size, $args)"
+      case FloatMultiType(Width8, _) => s"ks_array_double_from_data($size, $args)"
+
       case CalcIntType => s"ks_array_int64_t_from_data($size, $args)"
       case CalcFloatType => s"ks_array_double_from_data($size, $args)"
       case CalcStrType => s"ks_array_string_from_data($size, $args)"
