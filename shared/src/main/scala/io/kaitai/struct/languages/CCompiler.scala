@@ -765,12 +765,9 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   override def condRepeatCommonInit(id: Identifier, dataType: DataType, needRaw: NeedRaw): Unit = {
   }
 
-  def isTypeGeneric(id: Identifier): Boolean = {
-    if (idToStr(id).startsWith("_")) {
-      return false
-    }
-    val idType = typeProvider.determineType(id)
+  def isTypeGenericInternal(idType : DataType): Boolean = {
     idType match {
+      case at: ArrayType => isTypeGenericInternal(at.elType)
       case t: SwitchType =>
         t.combinedType match {
           case KaitaiStructType | AnyType => true
@@ -778,6 +775,14 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         }
       case _ => false
     }
+  }
+
+  def isTypeGeneric(id: Identifier): Boolean = {
+    if (idToStr(id).startsWith("_")) {
+      return false
+    }
+    val idType = typeProvider.determineType(id)
+    isTypeGenericInternal(idType)
   }
 
   override def handleAssignmentSimple(id: Identifier, expr: String): Unit =
