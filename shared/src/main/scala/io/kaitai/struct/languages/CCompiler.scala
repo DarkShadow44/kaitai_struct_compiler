@@ -473,6 +473,8 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     outMethodHead.puts("{")
     outMethodHead.inc
     outMethodBody.inc
+    outSrcInstances.puts
+    outSrcInstances.inc
   }
 
   override def instanceFooter: Unit = makeFooter(true)
