@@ -177,18 +177,20 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
       outHdrDefs.puts(s"typedef struct ksx_${className} ksx_${className};")
       outHdrDefs.puts(s"#endif")
     } else {
-      outHdrArrays.puts
-      outHdrArrays.puts(s"struct ksx_array_${className}")
-      outHdrArrays.puts("{")
-      outHdrArrays.inc
-      outHdrArrays.puts("ks_usertype_generic kaitai_base;")
-      outHdrArrays.puts("int64_t size;")
-      outHdrArrays.puts(s"ksx_$className** data;")
-      outHdrArrays.dec
-      outHdrArrays.puts(s"};")
       outHdrDefs.puts(s"typedef struct ksx_${className} ksx_${className};")
-      outHdrDefs.puts(s"typedef struct ksx_array_${className} ksx_array_${className};")
     }
+
+    outHdrArrays.puts
+    outHdrArrays.puts(s"struct ksx_array_${className}")
+    outHdrArrays.puts("{")
+    outHdrArrays.inc
+    outHdrArrays.puts("ks_usertype_generic kaitai_base;")
+    outHdrArrays.puts("int64_t size;")
+    outHdrArrays.puts(s"ksx_$className** data;")
+    outHdrArrays.dec
+    outHdrArrays.puts(s"};")
+    outHdrDefs.puts(s"typedef struct ksx_array_${className} ksx_array_${className};")
+
     outStruct.puts
     outStruct.puts(s"struct ksx_${className}")
     outStruct.puts("{")
@@ -764,9 +766,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
   }
 
   def isTypeGeneric(id: Identifier): Boolean = {
-    val currentAttr = typeProvider.nowClass.seq.find(x => idToStr(x.id) == idToStr(id))
-    if (currentAttr.isEmpty) return false;
-    currentAttr.get.dataType match {
+    if (idToStr(id).startsWith("_")) {
+      return false
+    }
+    val idType = typeProvider.determineType(id)
+    idType match {
       case t: SwitchType =>
         t.combinedType match {
           case KaitaiStructType | AnyType => true
