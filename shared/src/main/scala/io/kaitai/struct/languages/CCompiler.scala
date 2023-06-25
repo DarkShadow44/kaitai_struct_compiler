@@ -627,6 +627,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
         outMethodHead.puts(s"ks_custom_decoder _decoder_$name2;")
         outMethodBody.puts(s"_decoder_$name2 = ${procClass}_create(${args.map(expression).mkString(", ")});")
         outMethodBody.puts(s"$srcExpr = _decoder_$name2.decode(_decoder_$name2.userdata, $srcExpr);")
+        outMethodBody.puts(s"${procClass}_destroy(_decoder_$name2);")
     }
     varDest match {
       case RawIdentifier(_) =>
