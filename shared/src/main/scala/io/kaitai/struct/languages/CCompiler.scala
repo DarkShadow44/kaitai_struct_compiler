@@ -819,11 +819,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val ptr = getPtrSuffix(dataTypeLast)
     val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)}$ptr)"
     outMethodBody.puts(s"data->$name->size++;")
-    outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
+    outMethodBody.puts(s"data->$name->data = ks_realloc(root_stream->config, data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
     if (isTypeGeneric(id)) {
       outMethodHasInternal = true
-      outMethodBody.puts(s"internal->_read_instances_$name = realloc(internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
+      outMethodBody.puts(s"internal->_read_instances_$name = ks_realloc(root_stream->config, internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
       outMethodBody.puts(s"internal->_read_instances_$name[data->$name->size -1] = 0;")
     }
     handleAssignmentCommon(id, expr, true)
@@ -905,11 +905,11 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val ptr = getPtrSuffix(dataTypeLast)
     val sizeof = s"sizeof(${kaitaiType2NativeType(dataTypeLast)}$ptr)"
     outMethodBody.puts(s"data->$name->size++;")
-    outMethodBody.puts(s"data->$name->data = realloc(data->$name->data, $sizeof * data->$name->size);")
+    outMethodBody.puts(s"data->$name->data = ks_realloc(root_stream->config, data->$name->data, $sizeof * data->$name->size);")
     outMethodBody.puts(s"memset(data->$name->data + data->$name->size - 1, 0, $sizeof);")
     if (isTypeGeneric(id)) {
       outMethodHasInternal = true
-      outMethodBody.puts(s"internal->_read_instances_$name = realloc(internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
+      outMethodBody.puts(s"internal->_read_instances_$name = ks_realloc(root_stream->config, internal->_read_instances_$name, sizeof(ks_callback) * data->$name->size);")
       outMethodBody.puts(s"internal->_read_instances_$name[data->$name->size -1] = 0;")
     }
     handleAssignmentCommon(id, expr, true)
