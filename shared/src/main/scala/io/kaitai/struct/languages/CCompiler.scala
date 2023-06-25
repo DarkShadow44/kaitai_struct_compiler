@@ -290,7 +290,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
 
     outMethodBody.inc
     outMethodHead.inc
-    outSrcMain.puts(s"ksx_${className}* data = calloc(1, sizeof(ksx_${className}));")
+    outSrcMain.puts(s"ksx_${className}* data = ks_alloc(root_stream->config, sizeof(ksx_${className}));")
 
     if (rootName == className) {
       outMethodBody.puts(s"root_data = root_data != 0 ? root_data : data;")
@@ -803,7 +803,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val io_new = makeIO(io)
     outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-eos) */")
-    outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
+    outMethodBody.puts(s"data->$name = ks_alloc(root_stream->config, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
     outMethodBody.puts(s"KS_CHECK_$CurrentCheck(HANDLE(data->$name) = ks_handle_create(stream, data->$name, $arrayTypeSize, 0, 0));");
@@ -849,12 +849,12 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val ptr = getPtrSuffix(dataType)
     outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-expr) */")
-    outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
+    outMethodBody.puts(s"data->$name = ks_alloc(root_stream->config, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = $len;")
-    outMethodBody.puts(s"data->$name->data = calloc(sizeof(${kaitaiType2NativeType(dataType)}$ptr), data->$name->size);")
+    outMethodBody.puts(s"data->$name->data = ks_alloc(root_stream->config, sizeof(${kaitaiType2NativeType(dataType)}$ptr) * data->$name->size);")
     if (isTypeGeneric(id)) {
       outMethodHasInternal = true
-      outMethodBody.puts(s"internal->_read_instances_$name = calloc(sizeof(ks_callback), data->$name->size);")
+      outMethodBody.puts(s"internal->_read_instances_$name = ks_alloc(root_stream->config, sizeof(ks_callback) * data->$name->size);")
     }
     outMethodBody.puts(s"KS_CHECK_$CurrentCheck(HANDLE(data->$name) = ks_handle_create(stream, data->$name, $arrayTypeSize, 0, 0));");
     outMethodBody.puts(s"for ($pos = 0; $pos < data->$name->size; $pos++)")
@@ -881,7 +881,7 @@ class CCompiler(typeProvider: ClassTypeProvider, config: RuntimeConfig)
     val ptr = getPtrSuffix(dataType)
     outMethodHasI = true
     outMethodBody.puts("/* Array (repeat-until) */")
-    outMethodBody.puts(s"data->$name = calloc(1, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
+    outMethodBody.puts(s"data->$name = ks_alloc(root_stream->config, sizeof(${kaitaiType2NativeType(dataTypeArray)}));")
     outMethodBody.puts(s"data->$name->size = 0;")
     outMethodBody.puts(s"data->$name->data = 0;")
     outMethodBody.puts(s"KS_CHECK_$CurrentCheck(HANDLE(data->$name) = ks_handle_create(stream, data->$name, $arrayTypeSize, 0, 0));");
